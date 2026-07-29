@@ -6,7 +6,6 @@ import { COLORS as C, FONTS as F, CATEGORIES } from "../lib/constants";
 import { MOCK_CLINICS } from "../lib/mockClinics";
 import { Clinic } from "../lib/types";
 
-// ── SVG Icons ───────────────────────────────────────────────────
 function IconStethoscope({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -133,16 +132,6 @@ function IconMap({ size = 18 }: { size?: number }) {
   );
 }
 
-function IconX({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 6 6 18M6 6l12 12"/>
-    </svg>
-  );
-}
-
-// ── Type config ─────────────────────────────────────────────────
 function getTypeProps(type: Clinic["type"]) {
   const map = {
     family:    { icon: <IconStethoscope />, color: C.iBlue,   bg: C.blueL,   label: "Family Care",   pinColor: "#0A1F62" },
@@ -155,37 +144,24 @@ function getTypeProps(type: Clinic["type"]) {
   return map[type];
 }
 
-// ── Google Map Component ─────────────────────────────────────────
 function GoogleMap({
-  clinics,
-  isMobile,
-  onSelectClinic,
-  selectedId,
+  clinics, isMobile, onSelectClinic, selectedId,
 }: {
-  clinics: Clinic[];
-  isMobile: boolean;
-  onSelectClinic: (clinic: Clinic) => void;
-  selectedId: string | null;
+  clinics: Clinic[]; isMobile: boolean;
+  onSelectClinic: (clinic: Clinic) => void; selectedId: string | null;
 }) {
-  const mapRef    = useRef<HTMLDivElement>(null);
-  const mapObjRef = useRef<google.maps.Map | null>(null);
+  const mapRef     = useRef<HTMLDivElement>(null);
+  const mapObjRef  = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
 
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
     if (!apiKey || !mapRef.current) return;
 
-    // Load Google Maps script only once
-    if (window.google && window.google.maps) {
-      initMap();
-      return;
-    }
+    if (window.google && window.google.maps) { initMap(); return; }
 
     const existing = document.querySelector("script[data-gmaps]");
-    if (existing) {
-      existing.addEventListener("load", initMap);
-      return;
-    }
+    if (existing) { existing.addEventListener("load", initMap); return; }
 
     const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
@@ -196,77 +172,47 @@ function GoogleMap({
 
     function initMap() {
       if (!mapRef.current) return;
-
-      // Center on Muscatine, Iowa
       const center = { lat: 41.4245, lng: -91.0432 };
-
       const map = new window.google.maps.Map(mapRef.current, {
-        center,
-        zoom: 10,
-        mapTypeControl: false,
-        fullscreenControl: false,
-        streetViewControl: false,
-        zoomControlOptions: {
-          position: window.google.maps.ControlPosition.RIGHT_CENTER,
-        },
+        center, zoom: 10,
+        mapTypeControl: false, fullscreenControl: false, streetViewControl: false,
+        zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER },
         styles: [
           { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
           { featureType: "transit", stylers: [{ visibility: "off" }] },
         ],
       });
-
       mapObjRef.current = map;
-
-      // Clear old markers
       markersRef.current.forEach(m => m.setMap(null));
       markersRef.current = [];
 
-      // Add markers for each clinic
       clinics.forEach(clinic => {
         const tp = getTypeProps(clinic.type);
-
         const marker = new window.google.maps.Marker({
           position: { lat: clinic.lat, lng: clinic.lng },
           map,
           title: clinic.name,
           icon: {
             path: window.google.maps.SymbolPath.CIRCLE,
-            fillColor: tp.pinColor,
-            fillOpacity: 1,
-            strokeColor: "#FFFFFF",
-            strokeWeight: 2.5,
+            fillColor: tp.pinColor, fillOpacity: 1,
+            strokeColor: "#FFFFFF", strokeWeight: 2.5,
             scale: selectedId === clinic.id ? 14 : 10,
           },
         });
 
-        // Info window
         const infoWindow = new window.google.maps.InfoWindow({
           content: `
-            <div style="font-family: 'Roboto', sans-serif; padding: 4px; min-width: 200px;">
-              <div style="font-family: 'Antonio', sans-serif; font-size: 15px; font-weight: 700;
-                color: #0A1F62; margin-bottom: 4px;">${clinic.name}</div>
-              <div style="font-size: 12px; color: #5A6A8A; margin-bottom: 6px;">${clinic.address}</div>
-              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                <span style="font-size: 11px; font-weight: 500;
-                  color: ${tp.color}; background: ${tp.bg};
-                  padding: 2px 8px; border-radius: 4px;">${tp.label}</span>
-                <span style="font-size: 11px; font-weight: 500;
-                  color: ${clinic.open ? "#166534" : "#6B7280"};
-                  background: ${clinic.open ? "#DCFCE7" : "#F3F4F6"};
-                  padding: 2px 8px; border-radius: 4px;">
-                  ${clinic.open ? "Open Now" : "Closed"}</span>
+            <div style="font-family:'Roboto',sans-serif;padding:4px;min-width:200px;">
+              <div style="font-family:'Antonio',sans-serif;font-size:15px;font-weight:700;color:#0A1F62;margin-bottom:4px;">${clinic.name}</div>
+              <div style="font-size:12px;color:#5A6A8A;margin-bottom:6px;">${clinic.address}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:11px;font-weight:500;color:${tp.color};background:${tp.bg};padding:2px 8px;border-radius:4px;">${tp.label}</span>
+                <span style="font-size:11px;font-weight:500;color:${clinic.open ? "#166534" : "#6B7280"};background:${clinic.open ? "#DCFCE7" : "#F3F4F6"};padding:2px 8px;border-radius:4px;">${clinic.open ? "Open Now" : "Closed"}</span>
               </div>
-              <div style="margin-top: 8px; font-size: 12px; font-weight: 600;
-                color: #0A1F62;">${clinic.distance} away</div>
-            </div>
-          `,
+              <div style="margin-top:8px;font-size:12px;font-weight:600;color:#0A1F62;">${clinic.distance} away</div>
+            </div>`,
         });
-
-        marker.addListener("click", () => {
-          onSelectClinic(clinic);
-          infoWindow.open(map, marker);
-        });
-
+        marker.addListener("click", () => { onSelectClinic(clinic); infoWindow.open(map, marker); });
         markersRef.current.push(marker);
       });
     }
@@ -276,20 +222,12 @@ function GoogleMap({
     <div ref={mapRef} style={{
       width: "100%",
       height: isMobile ? "calc(100vh - 220px)" : "calc(100vh - 200px)",
-      borderRadius: 0,
     }} />
   );
 }
 
-// ── Mini clinic card for map sidebar ────────────────────────────
-function MiniCard({
-  clinic, isMobile, lang, onClick, selected
-}: {
-  clinic: Clinic;
-  isMobile: boolean;
-  lang: "en" | "es";
-  onClick: () => void;
-  selected: boolean;
+function MiniCard({ clinic, isMobile, lang, onClick, selected }: {
+  clinic: Clinic; isMobile: boolean; lang: "en"|"es"; onClick: () => void; selected: boolean;
 }) {
   const tp = getTypeProps(clinic.type);
   return (
@@ -312,37 +250,28 @@ function MiniCard({
       </div>
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }}>
         <span style={{ fontSize: 11, fontFamily: F.body, fontWeight: 500,
-          color: tp.color, background: tp.bg,
-          padding: "2px 8px", borderRadius: 4 }}>
+          color: tp.color, background: tp.bg, padding: "2px 8px", borderRadius: 4 }}>
           {tp.label}
         </span>
         <span style={{ fontSize: 11, fontFamily: F.body, fontWeight: 500,
           color: clinic.open ? "#166534" : C.t3,
           background: clinic.open ? "#DCFCE7" : "#F3F4F6",
           padding: "2px 8px", borderRadius: 4 }}>
-          {clinic.open
-            ? (lang === "en" ? "Open" : "Abierto")
-            : (lang === "en" ? "Closed" : "Cerrado")}
+          {clinic.open ? (lang === "en" ? "Open" : "Abierto") : (lang === "en" ? "Closed" : "Cerrado")}
         </span>
         {clinic.telehealth && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
             fontSize: 11, fontFamily: F.body, fontWeight: 500,
-            color: "#1D4ED8", background: "#EFF6FF",
-            padding: "2px 8px", borderRadius: 4 }}>
+            color: "#1D4ED8", background: "#EFF6FF", padding: "2px 8px", borderRadius: 4 }}>
             <IconVideo /> {lang === "en" ? "Telehealth" : "Telesalud"}
           </span>
         )}
       </div>
-      <a href={"tel:" + clinic.phone}
-        onClick={e => e.stopPropagation()}
-        style={{ textDecoration: "none" }}>
-        <button style={{ width: "100%", display: "flex",
-          alignItems: "center", justifyContent: "center", gap: 8,
-          padding: "9px", borderRadius: 4,
-          background: C.iBlue, color: C.iWhite,
-          border: "none", fontFamily: F.body,
-          fontSize: 13, fontWeight: 500,
-          cursor: "pointer", minHeight: 44 }}>
+      <a href={"tel:" + clinic.phone} onClick={e => e.stopPropagation()} style={{ textDecoration: "none" }}>
+        <button style={{ width: "100%", display: "flex", alignItems: "center",
+          justifyContent: "center", gap: 8, padding: "9px", borderRadius: 4,
+          background: C.iBlue, color: C.iWhite, border: "none",
+          fontFamily: F.body, fontSize: 13, fontWeight: 500, cursor: "pointer", minHeight: 44 }}>
           <IconPhone size={15} />
           {lang === "en" ? "Call" : "Llamar"}
         </button>
@@ -351,17 +280,10 @@ function MiniCard({
   );
 }
 
-// ── Full Clinic Card for list view ───────────────────────────────
-function ClinicCard({
-  clinic, isMobile, lang, onClick
-}: {
-  clinic: Clinic;
-  isMobile: boolean;
-  lang: "en" | "es";
-  onClick: () => void;
+function ClinicCard({ clinic, isMobile, lang, onClick }: {
+  clinic: Clinic; isMobile: boolean; lang: "en"|"es"; onClick: () => void;
 }) {
   const tp = getTypeProps(clinic.type);
-
   return (
     <div onClick={onClick}
       style={{ background: C.iWhite, borderRadius: 6,
@@ -383,37 +305,30 @@ function ClinicCard({
           alignItems: "flex-start", marginBottom: 12, gap: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: F.heading, fontSize: isMobile ? 17 : 19,
-              fontWeight: 700, color: C.iBlue,
-              lineHeight: 1.2, marginBottom: 8 }}>
+              fontWeight: 700, color: C.iBlue, lineHeight: 1.2, marginBottom: 8 }}>
               {clinic.name}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               <span style={{ fontSize: 12, fontFamily: F.body, fontWeight: 500,
-                color: tp.color, background: tp.bg,
-                padding: "3px 10px", borderRadius: 4 }}>
+                color: tp.color, background: tp.bg, padding: "3px 10px", borderRadius: 4 }}>
                 {tp.label}
               </span>
               <span style={{ fontSize: 12, fontFamily: F.body, fontWeight: 500,
                 color: clinic.open ? "#166534" : C.t3,
                 background: clinic.open ? "#DCFCE7" : "#F3F4F6",
                 padding: "3px 10px", borderRadius: 4 }}>
-                {clinic.open
-                  ? (lang === "en" ? "Open Now" : "Abierto")
-                  : (lang === "en" ? "Closed" : "Cerrado")}
+                {clinic.open ? (lang === "en" ? "Open Now" : "Abierto") : (lang === "en" ? "Closed" : "Cerrado")}
               </span>
               {clinic.telehealth && (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
                   fontSize: 12, fontFamily: F.body, fontWeight: 500,
-                  color: "#1D4ED8", background: "#EFF6FF",
-                  padding: "3px 10px", borderRadius: 4 }}>
-                  <IconVideo />
-                  {lang === "en" ? "Telehealth" : "Telesalud"}
+                  color: "#1D4ED8", background: "#EFF6FF", padding: "3px 10px", borderRadius: 4 }}>
+                  <IconVideo /> {lang === "en" ? "Telehealth" : "Telesalud"}
                 </span>
               )}
               {clinic.sliding && (
                 <span style={{ fontSize: 12, fontFamily: F.body, fontWeight: 500,
-                  color: "#166534", background: "#DCFCE7",
-                  padding: "3px 10px", borderRadius: 4 }}>
+                  color: "#166534", background: "#DCFCE7", padding: "3px 10px", borderRadius: 4 }}>
                   {lang === "en" ? "Sliding Scale" : "Escala Movil"}
                 </span>
               )}
@@ -442,41 +357,31 @@ function ClinicCard({
           {clinic.insurance.slice(0, isMobile ? 3 : 5).map(ins => (
             <span key={ins} style={{ fontFamily: F.body, fontSize: 12,
               color: C.t3, background: C.card,
-              border: "1px solid " + C.border,
-              padding: "2px 8px", borderRadius: 4 }}>
+              border: "1px solid " + C.border, padding: "2px 8px", borderRadius: 4 }}>
               {ins}
             </span>
           ))}
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <a href={"tel:" + clinic.phone}
-            onClick={e => e.stopPropagation()}
+          <a href={"tel:" + clinic.phone} onClick={e => e.stopPropagation()}
             style={{ textDecoration: "none", flex: 1 }}>
             <button style={{ width: "100%", display: "flex",
               alignItems: "center", justifyContent: "center", gap: 8,
-              padding: "11px", borderRadius: 4,
-              background: C.iBlue, color: C.iWhite,
-              border: "none", fontFamily: F.body,
-              fontSize: isMobile ? 14 : 15,
+              padding: "11px", borderRadius: 4, background: C.iBlue, color: C.iWhite,
+              border: "none", fontFamily: F.body, fontSize: isMobile ? 14 : 15,
               fontWeight: 500, cursor: "pointer", minHeight: 48 }}>
-              <IconPhone />
-              {lang === "en" ? "Call" : "Llamar"}
+              <IconPhone /> {lang === "en" ? "Call" : "Llamar"}
             </button>
           </a>
           <a href={"https://maps.google.com/?q=" + encodeURIComponent(clinic.address)}
-            target="_blank" rel="noreferrer"
-            onClick={e => e.stopPropagation()}
+            target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
             style={{ textDecoration: "none", flex: 1 }}>
             <button style={{ width: "100%", display: "flex",
               alignItems: "center", justifyContent: "center", gap: 8,
-              padding: "11px", borderRadius: 4,
-              background: C.iWhite, color: C.iBlue,
-              border: "1.5px solid " + C.iBlue,
-              fontFamily: F.body,
-              fontSize: isMobile ? 14 : 15,
-              fontWeight: 500, cursor: "pointer", minHeight: 48 }}>
-              <IconMapPin />
-              {lang === "en" ? "Directions" : "Como llegar"}
+              padding: "11px", borderRadius: 4, background: C.iWhite, color: C.iBlue,
+              border: "1.5px solid " + C.iBlue, fontFamily: F.body,
+              fontSize: isMobile ? 14 : 15, fontWeight: 500, cursor: "pointer", minHeight: 48 }}>
+              <IconMapPin /> {lang === "en" ? "Directions" : "Como llegar"}
             </button>
           </a>
         </div>
@@ -485,14 +390,14 @@ function ClinicCard({
   );
 }
 
-// ── RESULTS INNER ────────────────────────────────────────────────
 function ResultsInner() {
   const router   = useRouter();
   const params   = useSearchParams();
   const query    = params.get("q") ?? "";
   const catParam = params.get("cat") ?? "";
+  const langParam = (params.get("lang") ?? "en") as "en" | "es";
 
-  const [lang, setLang]             = useState<"en"|"es">("en");
+  const [lang, setLang]             = useState<"en"|"es">(langParam);
   const [isMobile, setIsMobile]     = useState(false);
   const [activeType, setActiveType] = useState<string>(catParam);
   const [vetOnly, setVetOnly]       = useState(false);
@@ -515,80 +420,64 @@ function ResultsInner() {
   const px = isMobile ? "18px" : "48px";
 
   return (
-    <main style={{ minHeight: "100vh", background: "#F4F6FB",
-      fontFamily: F.body }}>
+    <main style={{ minHeight: "100vh", background: "#F4F6FB", fontFamily: F.body }}>
 
-      {/* ── NAV ── */}
+      {/* NAV */}
       <nav style={{ width: "100%", background: C.iBlue,
         padding: "0 " + px, boxSizing: "border-box",
-        display: "flex", alignItems: "center",
-        justifyContent: "space-between",
-        height: isMobile ? 60 : 72,
-        borderBottom: "3px solid #1A3A7A" }}>
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        height: isMobile ? 60 : 72, borderBottom: "3px solid #1A3A7A" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <button onClick={() => router.push("/")}
+          <button onClick={() => router.push(`/?lang=${lang}`)}
             style={{ display: "flex", alignItems: "center", gap: 8,
-              background: "transparent", border: "none",
-              color: "#A8B8D8", cursor: "pointer",
-              fontFamily: F.body, fontSize: 14,
+              background: "transparent", border: "none", color: "#A8B8D8",
+              cursor: "pointer", fontFamily: F.body, fontSize: 14,
               minHeight: 44, padding: "0 4px" }}>
             <IconArrowLeft />
             {!isMobile && (lang === "en" ? "Back" : "Volver")}
           </button>
           <div style={{ width: 1, height: 24, background: "#2A4A8A" }} />
-          <span style={{ fontFamily: F.heading,
-            fontSize: isMobile ? 18 : 22,
+          <span style={{ fontFamily: F.heading, fontSize: isMobile ? 18 : 22,
             fontWeight: 700, color: C.iWhite }}>
             Iowa Rural Reach
           </span>
         </div>
-        <button onClick={() => setLang(lang === "en" ? "es" : "en")}
-          style={{ fontSize: 13, fontFamily: F.body,
-            padding: "6px 12px", borderRadius: 4,
-            border: "1px solid #3A5A9A", background: "transparent",
-            color: C.iWhite, cursor: "pointer", minHeight: 44 }}>
-          {lang === "en" ? "ES" : "EN"}
-        </button>
+        {/* Language indicator — not a toggle, just shows current lang */}
+        <div style={{ fontSize: 13, fontFamily: F.body,
+          padding: "6px 12px", borderRadius: 4,
+          border: "1px solid #3A5A9A", color: "#A8B8D8" }}>
+          {lang === "en" ? "EN" : "ES"}
+        </div>
       </nav>
 
-      {/* ── SEARCH BAR ── */}
-      <div style={{ background: C.iWhite,
-        borderBottom: "1px solid " + C.border,
+      {/* SEARCH BAR */}
+      <div style={{ background: C.iWhite, borderBottom: "1px solid " + C.border,
         padding: isMobile ? "12px 18px" : "14px 48px",
         display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10,
-          background: C.card, borderRadius: 4,
-          border: "1px solid " + C.border,
+          background: C.card, borderRadius: 4, border: "1px solid " + C.border,
           padding: "10px 16px", minHeight: 48 }}>
           <IconMapPin size={16} />
-          <span style={{ fontFamily: F.body,
-            fontSize: isMobile ? 14 : 16,
+          <span style={{ fontFamily: F.body, fontSize: isMobile ? 14 : 16,
             color: query ? C.t2 : C.t4 }}>
-            {query || (lang === "en"
-              ? "Search for care near you..."
-              : "Buscar atencion...")}
+            {query || (lang === "en" ? "Search for care near you..." : "Buscar atencion...")}
           </span>
         </div>
-        <button onClick={() => router.push("/")}
-          style={{ background: C.iBlue, color: C.iWhite,
-            border: "none", borderRadius: 4,
+        <button onClick={() => router.push(`/?lang=${lang}`)}
+          style={{ background: C.iBlue, color: C.iWhite, border: "none", borderRadius: 4,
             padding: isMobile ? "10px 14px" : "12px 24px",
             fontFamily: F.heading, fontSize: isMobile ? 13 : 15,
-            fontWeight: 700, cursor: "pointer",
-            letterSpacing: "0.04em", minHeight: 48,
-            whiteSpace: "nowrap" }}>
+            fontWeight: 700, cursor: "pointer", letterSpacing: "0.04em",
+            minHeight: 48, whiteSpace: "nowrap" }}>
           {lang === "en" ? "New Search" : "Nueva Busqueda"}
         </button>
       </div>
 
-      {/* ── FILTER + VIEW TOGGLE ROW ── */}
-      <div style={{ background: C.iWhite,
-        borderBottom: "1px solid " + C.border,
+      {/* FILTER ROW */}
+      <div style={{ background: C.iWhite, borderBottom: "1px solid " + C.border,
         padding: isMobile ? "10px 18px" : "12px 48px",
-        display: "flex", alignItems: "center",
-        gap: 8, overflowX: "auto" }}>
+        display: "flex", alignItems: "center", gap: 8, overflowX: "auto" }}>
 
-        {/* All */}
         <button onClick={() => { setActiveType(""); setVetOnly(false); }}
           style={{ padding: isMobile ? "8px 12px" : "9px 18px",
             borderRadius: 4, fontSize: isMobile ? 13 : 14,
@@ -609,20 +498,15 @@ function ResultsInner() {
               style={{ padding: isMobile ? "8px 12px" : "9px 18px",
                 borderRadius: 4, fontSize: isMobile ? 13 : 14,
                 fontFamily: F.body, fontWeight: 500,
-                border: "1.5px solid " + (isActive
-                  ? (isVet ? C.gold : C.iBlue) : C.border),
-                background: isActive
-                  ? (isVet ? C.goldL : C.blueL) : C.iWhite,
-                color: isActive
-                  ? (isVet ? "#7A5E00" : C.iBlue) : C.t3,
-                cursor: "pointer", whiteSpace: "nowrap",
-                minHeight: 44 }}>
+                border: "1.5px solid " + (isActive ? (isVet ? C.gold : C.iBlue) : C.border),
+                background: isActive ? (isVet ? C.goldL : C.blueL) : C.iWhite,
+                color: isActive ? (isVet ? "#7A5E00" : C.iBlue) : C.t3,
+                cursor: "pointer", whiteSpace: "nowrap", minHeight: 44 }}>
               {lang === "en" ? cat.label : cat.labelEs}
             </button>
           );
         })}
 
-        {/* Veterans toggle */}
         <button onClick={() => { setVetOnly(!vetOnly); setActiveType(""); }}
           style={{ display: "flex", alignItems: "center", gap: 6,
             padding: isMobile ? "8px 12px" : "9px 18px",
@@ -631,16 +515,15 @@ function ResultsInner() {
             border: "1.5px solid " + (vetOnly ? C.gold : C.border),
             background: vetOnly ? C.goldL : C.iWhite,
             color: vetOnly ? "#7A5E00" : C.t3,
-            cursor: "pointer", whiteSpace: "nowrap",
-            minHeight: 44 }}>
+            cursor: "pointer", whiteSpace: "nowrap", minHeight: 44 }}>
           <IconShield size={15} />
           {lang === "en" ? "Veterans" : "Veteranos"}
         </button>
 
-        {/* List / Map toggle — pushed right */}
+        {/* List / Map toggle */}
         <div style={{ marginLeft: "auto", display: "flex",
-          border: "1.5px solid " + C.border,
-          borderRadius: 4, overflow: "hidden", flexShrink: 0 }}>
+          border: "1.5px solid " + C.border, borderRadius: 4,
+          overflow: "hidden", flexShrink: 0 }}>
           <button onClick={() => setViewMode("list")}
             style={{ display: "flex", alignItems: "center", gap: 6,
               padding: isMobile ? "8px 12px" : "9px 16px",
@@ -648,8 +531,7 @@ function ResultsInner() {
               background: viewMode === "list" ? C.iBlue : C.iWhite,
               color: viewMode === "list" ? C.iWhite : C.t3,
               cursor: "pointer", fontSize: isMobile ? 13 : 14,
-              fontFamily: F.body, fontWeight: 500,
-              minHeight: 44 }}>
+              fontFamily: F.body, fontWeight: 500, minHeight: 44 }}>
             <IconList size={15} />
             {!isMobile && (lang === "en" ? "List" : "Lista")}
           </button>
@@ -660,19 +542,17 @@ function ResultsInner() {
               background: viewMode === "map" ? C.iBlue : C.iWhite,
               color: viewMode === "map" ? C.iWhite : C.t3,
               cursor: "pointer", fontSize: isMobile ? 13 : 14,
-              fontFamily: F.body, fontWeight: 500,
-              minHeight: 44 }}>
+              fontFamily: F.body, fontWeight: 500, minHeight: 44 }}>
             <IconMap size={15} />
             {!isMobile && (lang === "en" ? "Map" : "Mapa")}
           </button>
         </div>
       </div>
 
-      {/* ── LIST VIEW ── */}
+      {/* LIST VIEW */}
       {viewMode === "list" && (
         <div style={{ padding: isMobile ? "20px 18px" : "32px 48px" }}>
-          <div style={{ fontFamily: F.body,
-            fontSize: isMobile ? 14 : 16,
+          <div style={{ fontFamily: F.body, fontSize: isMobile ? 14 : 16,
             color: C.t3, marginBottom: 20, fontWeight: 500 }}>
             {filtered.length === 0
               ? (lang === "en" ? "No results found." : "Sin resultados.")
@@ -682,27 +562,19 @@ function ResultsInner() {
             gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)",
             gap: isMobile ? 16 : 20 }}>
             {filtered.map(clinic => (
-              <ClinicCard
-                key={clinic.id}
-                clinic={clinic}
-                isMobile={isMobile}
-                lang={lang}
-                onClick={() => router.push("/clinic/" + clinic.id)}
-              />
+              <ClinicCard key={clinic.id} clinic={clinic} isMobile={isMobile} lang={lang}
+                onClick={() => router.push(`/clinic/${clinic.id}?lang=${lang}`)} />
             ))}
           </div>
           {filtered.length === 0 && (
             <div style={{ textAlign: "center", padding: "60px 20px" }}>
-              <div style={{ fontFamily: F.heading, fontSize: 24,
-                color: C.t4, marginBottom: 16 }}>
+              <div style={{ fontFamily: F.heading, fontSize: 24, color: C.t4, marginBottom: 16 }}>
                 {lang === "en" ? "No results found" : "Sin resultados"}
               </div>
               <button onClick={() => { setActiveType(""); setVetOnly(false); }}
-                style={{ background: C.iBlue, color: C.iWhite,
-                  border: "none", borderRadius: 4,
-                  padding: "12px 28px", fontFamily: F.heading,
-                  fontSize: 16, fontWeight: 700,
-                  cursor: "pointer", minHeight: 48 }}>
+                style={{ background: C.iBlue, color: C.iWhite, border: "none",
+                  borderRadius: 4, padding: "12px 28px", fontFamily: F.heading,
+                  fontSize: 16, fontWeight: 700, cursor: "pointer", minHeight: 48 }}>
                 {lang === "en" ? "Show All Care" : "Mostrar Todo"}
               </button>
             </div>
@@ -710,81 +582,50 @@ function ResultsInner() {
         </div>
       )}
 
-      {/* ── MAP VIEW ── */}
+      {/* MAP VIEW */}
       {viewMode === "map" && (
-        <div style={{ display: "flex",
-          flexDirection: isMobile ? "column" : "row",
+        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row",
           height: isMobile ? "auto" : "calc(100vh - 200px)" }}>
-
-          {/* Sidebar — clinic list */}
-          <div style={{
-            width: isMobile ? "100%" : 320,
-            flexShrink: 0,
-            overflowY: isMobile ? "visible" : "auto",
-            background: "#F4F6FB",
+          <div style={{ width: isMobile ? "100%" : 320, flexShrink: 0,
+            overflowY: isMobile ? "visible" : "auto", background: "#F4F6FB",
             borderRight: isMobile ? "none" : "1px solid " + C.border,
-            padding: isMobile ? "14px 18px" : "16px",
-            order: isMobile ? 2 : 1 }}>
-
+            padding: isMobile ? "14px 18px" : "16px", order: isMobile ? 2 : 1 }}>
             <div style={{ fontFamily: F.body, fontSize: 13,
               color: C.t3, marginBottom: 12, fontWeight: 500 }}>
               {filtered.length} {lang === "en" ? "results" : "resultados"}
             </div>
-
             {filtered.map(clinic => (
-              <MiniCard
-                key={clinic.id}
-                clinic={clinic}
-                isMobile={isMobile}
-                lang={lang}
+              <MiniCard key={clinic.id} clinic={clinic} isMobile={isMobile} lang={lang}
                 selected={selectedClinic?.id === clinic.id}
-                onClick={() => {
-                  setSelectedClinic(clinic);
-                  router.push("/clinic/" + clinic.id);
-                }}
-              />
+                onClick={() => { setSelectedClinic(clinic); router.push(`/clinic/${clinic.id}?lang=${lang}`); }} />
             ))}
           </div>
-
-          {/* Map */}
-          <div style={{ flex: 1, order: isMobile ? 1 : 2,
-            minHeight: isMobile ? 340 : "auto" }}>
-            <GoogleMap
-              clinics={filtered}
-              isMobile={isMobile}
+          <div style={{ flex: 1, order: isMobile ? 1 : 2, minHeight: isMobile ? 340 : "auto" }}>
+            <GoogleMap clinics={filtered} isMobile={isMobile}
               selectedId={selectedClinic?.id ?? null}
-              onSelectClinic={clinic => setSelectedClinic(clinic)}
-            />
-
-            {/* Map legend */}
-            <div style={{ position: "absolute",
-              bottom: isMobile ? "auto" : 100,
+              onSelectClinic={clinic => setSelectedClinic(clinic)} />
+            <div style={{ position: "absolute", bottom: isMobile ? "auto" : 100,
               right: isMobile ? "auto" : 60,
-              background: "rgba(255,255,255,0.95)",
-              borderRadius: 6, padding: "10px 14px",
-              border: "1px solid " + C.border,
+              background: "rgba(255,255,255,0.95)", borderRadius: 6,
+              padding: "10px 14px", border: "1px solid " + C.border,
               boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
               display: isMobile ? "none" : "block" }}>
-              <div style={{ fontFamily: F.body, fontSize: 11,
-                fontWeight: 600, color: C.t3,
-                textTransform: "uppercase", letterSpacing: "0.05em",
-                marginBottom: 8 }}>
+              <div style={{ fontFamily: F.body, fontSize: 11, fontWeight: 600,
+                color: C.t3, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
                 {lang === "en" ? "Pin Legend" : "Leyenda"}
               </div>
               {[
-                { color: "#0A1F62", label: lang === "en" ? "Family Care"   : "Atención Familiar" },
+                { color: "#0A1F62", label: lang === "en" ? "Family Care"   : "Atencion Familiar" },
                 { color: "#166534", label: lang === "en" ? "Mental Health" : "Salud Mental" },
                 { color: "#6B21A8", label: lang === "en" ? "Dental"        : "Dental" },
                 { color: "#B45309", label: lang === "en" ? "Veterans"      : "Veteranos" },
                 { color: "#D80025", label: lang === "en" ? "Emergency"     : "Emergencia" },
               ].map(item => (
-                <div key={item.label} style={{ display: "flex",
-                  alignItems: "center", gap: 8, marginBottom: 5 }}>
+                <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
                   <div style={{ width: 12, height: 12, borderRadius: "50%",
                     background: item.color, border: "2px solid white",
                     boxShadow: "0 0 0 1px " + item.color }} />
-                  <span style={{ fontFamily: F.body, fontSize: 12,
-                    color: C.t2 }}>{item.label}</span>
+                  <span style={{ fontFamily: F.body, fontSize: 12, color: C.t2 }}>{item.label}</span>
                 </div>
               ))}
             </div>
@@ -792,33 +633,25 @@ function ResultsInner() {
         </div>
       )}
 
-      {/* ── EMERGENCY FOOTER — list view only ── */}
+      {/* EMERGENCY FOOTER - list view only */}
       {viewMode === "list" && (
-        <div style={{ background: C.iWhite,
-          borderTop: "1px solid " + C.border,
+        <div style={{ background: C.iWhite, borderTop: "1px solid " + C.border,
           padding: isMobile ? "16px 18px" : "20px 48px",
-          display: "flex",
-          flexDirection: isMobile ? "column" : "row",
-          gap: 12 }}>
+          display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12 }}>
           <a href="tel:911" style={{ textDecoration: "none", flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12,
               padding: "12px 16px", borderRadius: 6,
               background: C.redL, border: "1.5px solid " + C.iRed }}>
-              <div style={{ width: 40, height: 40, borderRadius: 4,
-                background: C.iRed, display: "flex",
-                alignItems: "center", justifyContent: "center",
-                flexShrink: 0 }}>
-                <span style={{ fontFamily: F.heading, fontSize: 13,
-                  fontWeight: 700, color: C.iWhite }}>911</span>
+              <div style={{ width: 40, height: 40, borderRadius: 4, background: C.iRed,
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ fontFamily: F.heading, fontSize: 13, fontWeight: 700, color: C.iWhite }}>911</span>
               </div>
               <div>
-                <div style={{ fontFamily: F.heading, fontSize: 15,
-                  fontWeight: 700, color: C.iRed }}>Physical Emergency</div>
-                <div style={{ fontFamily: F.body, fontSize: 13,
-                  color: "#8B0000", marginTop: 1 }}>
-                  {lang === "en"
-                    ? "Immediate danger - Call 911"
-                    : "Peligro inmediato - Llame al 911"}
+                <div style={{ fontFamily: F.heading, fontSize: 15, fontWeight: 700, color: C.iRed }}>
+                  {lang === "en" ? "Physical Emergency" : "Emergencia Fisica"}
+                </div>
+                <div style={{ fontFamily: F.body, fontSize: 13, color: "#8B0000", marginTop: 1 }}>
+                  {lang === "en" ? "Immediate danger - Call 911" : "Peligro inmediato - Llame al 911"}
                 </div>
               </div>
             </div>
@@ -827,18 +660,15 @@ function ResultsInner() {
             <div style={{ display: "flex", alignItems: "center", gap: 12,
               padding: "12px 16px", borderRadius: 6,
               background: C.blueL, border: "1.5px solid " + C.iBlue }}>
-              <div style={{ width: 40, height: 40, borderRadius: 4,
-                background: C.iBlue, display: "flex",
-                alignItems: "center", justifyContent: "center",
-                flexShrink: 0 }}>
-                <span style={{ fontFamily: F.heading, fontSize: 13,
-                  fontWeight: 700, color: C.iWhite }}>988</span>
+              <div style={{ width: 40, height: 40, borderRadius: 4, background: C.iBlue,
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ fontFamily: F.heading, fontSize: 13, fontWeight: 700, color: C.iWhite }}>988</span>
               </div>
               <div>
-                <div style={{ fontFamily: F.heading, fontSize: 15,
-                  fontWeight: 700, color: C.iBlue }}>Mental Health Crisis</div>
-                <div style={{ fontFamily: F.body, fontSize: 13,
-                  color: C.t2, marginTop: 1 }}>
+                <div style={{ fontFamily: F.heading, fontSize: 15, fontWeight: 700, color: C.iBlue }}>
+                  {lang === "en" ? "Mental Health Crisis" : "Crisis de Salud Mental"}
+                </div>
+                <div style={{ fontFamily: F.body, fontSize: 13, color: C.t2, marginTop: 1 }}>
                   {lang === "en" ? "Call or text 988" : "Llame o escriba al 988"}
                 </div>
               </div>
@@ -850,13 +680,11 @@ function ResultsInner() {
   );
 }
 
-// ── Default export ───────────────────────────────────────────────
 export default function ResultsPage() {
   return (
     <Suspense fallback={
-      <div style={{ minHeight: "100vh", display: "flex",
-        alignItems: "center", justifyContent: "center",
-        fontFamily: "'Roboto', sans-serif", color: "#5A6A8A" }}>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center",
+        justifyContent: "center", fontFamily: "'Roboto', sans-serif", color: "#5A6A8A" }}>
         Loading...
       </div>
     }>

@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { COLORS as C, FONTS as F, CATEGORIES } from "./lib/constants";
 
-// ── SVG Icons ───────────────────────────────────────────────────
 function IconStethoscope() {
   return (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
@@ -108,7 +107,6 @@ const CAT_ICONS = [
   <IconHeart key="u" />,
 ];
 
-// ── MAIN PAGE ───────────────────────────────────────────────────
 export default function Home() {
   const router = useRouter();
 
@@ -125,25 +123,21 @@ export default function Home() {
   }, []);
 
   const t = {
-    appName:     "Iowa Rural Reach",
-    appSub:      lang === "en" ? "AI Health Care Navigator" : "Buscador de Atención Médica con IA",
-    heading:     lang === "en" ? "What kind of care do you need?"                              : "¿Qué tipo de atención necesita?",
-    sub:         lang === "en" ? "Describe your situation and we will find the right care near you." : "Describa su situación y encontraremos opciones cerca de usted.",
-    placeholder: lang === "en" ? "e.g. I need a doctor who takes Medicaid in Muscatine"         : "ej. Necesito un médico que acepte Medicaid",
+    appSub:      lang === "en" ? "Iowa AI Health Care Finder" : "Buscador de Atencion Medica con IA",
+    heading:     lang === "en" ? "What kind of care do you need?" : "Que tipo de atencion necesita?",
+    sub:         lang === "en" ? "Describe your situation and we will find the right care near you." : "Describa su situacion y encontraremos opciones cerca de usted.",
+    placeholder: lang === "en" ? "e.g. I need a doctor who takes Medicaid in Muscatine" : "ej. Necesito un medico que acepte Medicaid",
     mic:         lang === "en" ? "Or speak"  : "O hable",
     cta:         lang === "en" ? "Find Care" : "Buscar",
     aiNav:       lang === "en" ? "Ask AI Navigator" : "Preguntar al IA",
-    orPick:      lang === "en" ? "Or choose a category" : "O elija una categoría",
-    howTitle:    lang === "en" ? "How Iowa Rural Reach helps" : "Cómo ayuda Iowa Rural Reach",
-    card1Title:  lang === "en" ? "Find the right match"   : "Encuentre la opción correcta",
-    card1Body:   lang === "en" ? "Filter by insurance, cost, language, and distance - not just what is nearest."
-                               : "Filtre por seguro, costo, idioma y distancia.",
-    card2Title:  lang === "en" ? "Veterans care included" : "Atención para veteranos",
-    card2Body:   lang === "en" ? "Dedicated layer for VA facilities, Vet Centers, and benefits offices near you."
-                               : "Capa dedicada para instalaciones VA y oficinas de beneficios.",
-    card3Title:  lang === "en" ? "AI Care Navigator"      : "Navegador de Atención IA",
-    card3Body:   lang === "en" ? "Speak or type your situation. Get personalized care recommendations instantly."
-                               : "Hable o escriba su situación y reciba recomendaciones personalizadas.",
+    orPick:      lang === "en" ? "Or choose a category" : "O elija una categoria",
+    howTitle:    lang === "en" ? "How Iowa Rural Reach helps" : "Como ayuda Iowa Rural Reach",
+    card1Title:  lang === "en" ? "Find the right match"   : "Encuentre la opcion correcta",
+    card1Body:   lang === "en" ? "Filter by insurance, cost, language, and distance - not just what is nearest." : "Filtre por seguro, costo, idioma y distancia.",
+    card2Title:  lang === "en" ? "Veterans care included" : "Atencion para veteranos",
+    card2Body:   lang === "en" ? "Dedicated layer for VA facilities, Vet Centers, and benefits offices near you." : "Capa dedicada para instalaciones VA y oficinas de beneficios.",
+    card3Title:  lang === "en" ? "AI Care Navigator"      : "Navegador de Atencion IA",
+    card3Body:   lang === "en" ? "Speak or type your situation. Get personalized care recommendations instantly." : "Hable o escriba su situacion y reciba recomendaciones personalizadas.",
   };
 
   function handleVoice() {
@@ -159,38 +153,34 @@ export default function Home() {
 
   function handleFindCare() {
     const cat = activeIdx !== null ? CATEGORIES[activeIdx].id : "";
-    router.push(`/results?q=${encodeURIComponent(query)}&cat=${cat}`);
+    router.push(`/results?q=${encodeURIComponent(query)}&cat=${cat}&lang=${lang}`);
   }
 
   function handleCategoryClick(i: number, catId: string) {
     const newIdx = activeIdx === i ? null : i;
     setActiveIdx(newIdx);
     if (newIdx !== null) {
-      router.push(`/results?cat=${catId}`);
+      router.push(`/results?cat=${catId}&lang=${lang}`);
     }
   }
 
-  // ── Responsive helpers ──────────────────────────────────────
   const px          = isMobile ? "18px" : "56px";
   const headingSize = isMobile ? 28      : 46;
   const bodySize    = isMobile ? 16      : 18;
   const navH        = isMobile ? 68      : 96;
 
   return (
-    <main style={{ minHeight: "100vh", background: C.iWhite,
-      fontFamily: F.body, color: C.t2 }}>
+    <main style={{ minHeight: "100vh", background: C.iWhite, fontFamily: F.body, color: C.t2 }}>
 
-      {/* ══ NAV ══════════════════════════════════════════════ */}
+      {/* NAV */}
       <nav style={{ width: "100%", background: C.iBlue,
         padding: "0 " + px, boxSizing: "border-box",
         display: "flex", alignItems: "center",
         justifyContent: "space-between", height: navH,
         borderBottom: "3px solid #1A3A7A" }}>
-
         <div style={{ display: "flex", flexDirection: "column" }}>
           <span style={{ fontFamily: F.heading, fontSize: isMobile ? 24 : 34,
-            fontWeight: 700, color: C.iWhite, letterSpacing: "0.01em",
-            lineHeight: 1.1 }}>
+            fontWeight: 700, color: C.iWhite, letterSpacing: "0.01em", lineHeight: 1.1 }}>
             Iowa Rural Reach
           </span>
           {!isMobile && (
@@ -200,15 +190,13 @@ export default function Home() {
             </span>
           )}
         </div>
-
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button onClick={() => setLang(lang === "en" ? "es" : "en")}
             style={{ fontSize: isMobile ? 13 : 14, fontFamily: F.body,
               padding: isMobile ? "6px 12px" : "7px 16px", borderRadius: 4,
               border: "1px solid #3A5A9A", background: "transparent",
-              color: C.iWhite, cursor: "pointer", fontWeight: 500,
-              minHeight: 44 }}>
-            {lang === "en" ? "🇲🇽 Español" : "🇺🇸 English"}
+              color: C.iWhite, cursor: "pointer", fontWeight: 500, minHeight: 44 }}>
+            {lang === "en" ? "Espanol" : "English"}
           </button>
           <button title="Accessibility options"
             style={{ width: 44, height: 44, borderRadius: 4,
@@ -220,42 +208,34 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* ══ HERO ════════════════════════════════════════════ */}
+      {/* HERO */}
       <section style={{ width: "100%", boxSizing: "border-box",
         padding: isMobile ? "36px 18px 32px" : "72px 56px 64px",
         display: "grid",
         gridTemplateColumns: isMobile ? "1fr" : "1.1fr 0.9fr",
         gap: isMobile ? 32 : 64, alignItems: "start" }}>
 
-        {/* ── LEFT ── */}
+        {/* LEFT */}
         <div>
           <h1 style={{ fontFamily: F.heading, fontSize: headingSize,
             fontWeight: 700, color: C.iBlue,
-            margin: "0 0 16px", lineHeight: 1.15,
-            letterSpacing: "0.01em" }}>
+            margin: "0 0 16px", lineHeight: 1.15, letterSpacing: "0.01em" }}>
             {t.heading}
           </h1>
           <p style={{ fontFamily: F.body, fontSize: bodySize,
-            color: C.t3, margin: "0 0 32px", lineHeight: 1.75,
-            fontWeight: 400 }}>
+            color: C.t3, margin: "0 0 32px", lineHeight: 1.75, fontWeight: 400 }}>
             {t.sub}
           </p>
 
-          {/* ── SEARCH CARD ── */}
+          {/* Search card */}
           <div style={{ background: C.iWhite, borderRadius: 6,
             border: "1.5px solid " + C.border,
             boxShadow: "0 4px 24px rgba(10,31,98,0.10)",
             overflow: "hidden", marginBottom: 24 }}>
-
             <textarea
               value={query}
               onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleFindCare();
-                }
-              }}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleFindCare(); }}}
               placeholder={t.placeholder}
               rows={3}
               aria-label="Describe what care you need"
@@ -294,21 +274,18 @@ export default function Home() {
               </button>
             </div>
 
-            {/* AI Navigator button — full width below */}
+            {/* AI Navigator button */}
             <div style={{ padding: isMobile ? "0 14px 14px" : "0 18px 14px",
               background: "#FAFBFF" }}>
               <button
-                onClick={() => router.push("/navigator")}
+                onClick={() => router.push(`/navigator?lang=${lang}`)}
                 style={{ width: "100%",
                   display: "flex", alignItems: "center",
                   justifyContent: "center", gap: 8,
-                  background: "transparent",
-                  color: C.iBlue,
-                  border: "1.5px solid " + C.iBlue,
-                  borderRadius: 4,
+                  background: "transparent", color: C.iBlue,
+                  border: "1.5px solid " + C.iBlue, borderRadius: 4,
                   padding: isMobile ? "10px 20px" : "11px 20px",
-                  fontSize: isMobile ? 14 : 15,
-                  fontFamily: F.heading,
+                  fontSize: isMobile ? 14 : 15, fontFamily: F.heading,
                   fontWeight: 700, cursor: "pointer",
                   letterSpacing: "0.04em", minHeight: 44 }}>
                 <IconBot />
@@ -324,8 +301,7 @@ export default function Home() {
               letterSpacing: "0.08em", marginBottom: 14 }}>
               {t.orPick}
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap",
-              gap: isMobile ? 8 : 10 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 8 : 10 }}>
               {CATEGORIES.map((cat, i) => {
                 const isActive = activeIdx === i;
                 const isVet    = cat.id === "veteran";
@@ -339,14 +315,10 @@ export default function Home() {
                       fontFamily: F.body, fontWeight: 500,
                       cursor: "pointer", transition: "all 0.15s",
                       minHeight: 48,
-                      border: "1.5px solid " + (isActive
-                        ? (isVet ? C.gold : C.iBlue) : C.border),
-                      background: isActive
-                        ? (isVet ? C.goldL : C.blueL) : C.iWhite,
-                      color: isActive
-                        ? (isVet ? "#7A5E00" : C.iBlue) : C.t2 }}>
-                    <span style={{ color: isActive
-                      ? (isVet ? "#7A5E00" : C.iBlue) : C.t3 }}>
+                      border: "1.5px solid " + (isActive ? (isVet ? C.gold : C.iBlue) : C.border),
+                      background: isActive ? (isVet ? C.goldL : C.blueL) : C.iWhite,
+                      color: isActive ? (isVet ? "#7A5E00" : C.iBlue) : C.t2 }}>
+                    <span style={{ color: isActive ? (isVet ? "#7A5E00" : C.iBlue) : C.t3 }}>
                       {CAT_ICONS[i]}
                     </span>
                     {lang === "en" ? cat.label : cat.labelEs}
@@ -372,7 +344,7 @@ export default function Home() {
                 <div>
                   <div style={{ fontFamily: F.heading, fontSize: isMobile ? 15 : 16,
                     fontWeight: 700, color: C.iRed, letterSpacing: "0.02em" }}>
-                    Physical Emergency
+                    {lang === "en" ? "Physical Emergency" : "Emergencia Fisica"}
                   </div>
                   <div style={{ fontFamily: F.body, fontSize: isMobile ? 13 : 14,
                     color: "#8B0000", marginTop: 2, lineHeight: 1.4 }}>
@@ -383,7 +355,6 @@ export default function Home() {
                 </div>
               </div>
             </a>
-
             <a href="tel:988" style={{ textDecoration: "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14,
                 padding: isMobile ? "14px 16px" : "16px 20px",
@@ -398,7 +369,7 @@ export default function Home() {
                 <div>
                   <div style={{ fontFamily: F.heading, fontSize: isMobile ? 15 : 16,
                     fontWeight: 700, color: C.iBlue, letterSpacing: "0.02em" }}>
-                    Mental Health Crisis
+                    {lang === "en" ? "Mental Health Crisis" : "Crisis de Salud Mental"}
                   </div>
                   <div style={{ fontFamily: F.body, fontSize: isMobile ? 13 : 14,
                     color: C.t2, marginTop: 2, lineHeight: 1.4 }}>
@@ -412,7 +383,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── RIGHT — desktop only ── */}
+        {/* RIGHT - desktop only */}
         {!isMobile && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div style={{ fontFamily: F.body, fontSize: 18, fontWeight: 600,
@@ -452,7 +423,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* ══ BOTTOM STRIP ════════════════════════════════════ */}
+      {/* BOTTOM STRIP */}
       <section style={{ width: "100%", background: C.iBlue,
         padding: isMobile ? "36px 18px" : "52px 56px",
         boxSizing: "border-box" }}>
@@ -460,16 +431,16 @@ export default function Home() {
           fontWeight: 400, color: "#A8B8D8",
           textTransform: "uppercase", letterSpacing: "0.1em",
           marginBottom: isMobile ? 24 : 32 }}>
-          {lang === "en" ? "Care Categories" : "Categorías de Atención"}
+          {lang === "en" ? "Care Categories" : "Categorias de Atencion"}
         </div>
         <div style={{ display: "grid",
           gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)",
           gap: isMobile ? 20 : 32 }}>
           {[
-            { icon: <IconStethoscope />, label: lang === "en" ? "Family Care"   : "Atención Familiar", sub: lang === "en" ? "Primary care & clinics"     : "Atención primaria" },
-            { icon: <IconBrain />,       label: lang === "en" ? "Mental Health" : "Salud Mental",      sub: lang === "en" ? "Counseling & crisis support" : "Consejería y apoyo" },
+            { icon: <IconStethoscope />, label: lang === "en" ? "Family Care"   : "Atencion Familiar", sub: lang === "en" ? "Primary care & clinics"     : "Atencion primaria" },
+            { icon: <IconBrain />,       label: lang === "en" ? "Mental Health" : "Salud Mental",      sub: lang === "en" ? "Counseling & crisis support" : "Consejeria y apoyo" },
             { icon: <IconShield />,      label: lang === "en" ? "Veterans Care" : "Veteranos",         sub: lang === "en" ? "VA facilities & Vet Centers" : "Instalaciones VA" },
-            { icon: <IconHeart />,       label: lang === "en" ? "No Insurance"  : "Sin Seguro",        sub: lang === "en" ? "Sliding-scale & free care"   : "Atención gratuita" },
+            { icon: <IconHeart />,       label: lang === "en" ? "No Insurance"  : "Sin Seguro",        sub: lang === "en" ? "Sliding-scale & free care"   : "Atencion gratuita" },
           ].map((item, i) => (
             <div key={i} style={{ display: "flex",
               flexDirection: isMobile ? "column" : "row",
@@ -483,14 +454,11 @@ export default function Home() {
                 {item.icon}
               </div>
               <div>
-                <div style={{ fontFamily: F.heading,
-                  fontSize: isMobile ? 15 : 17,
-                  fontWeight: 700, color: C.iWhite,
-                  letterSpacing: "0.01em" }}>
+                <div style={{ fontFamily: F.heading, fontSize: isMobile ? 15 : 17,
+                  fontWeight: 700, color: C.iWhite, letterSpacing: "0.01em" }}>
                   {item.label}
                 </div>
-                <div style={{ fontFamily: F.body,
-                  fontSize: isMobile ? 12 : 14,
+                <div style={{ fontFamily: F.body, fontSize: isMobile ? 12 : 14,
                   color: "#A8B8D8", marginTop: 4, lineHeight: 1.5 }}>
                   {item.sub}
                 </div>
