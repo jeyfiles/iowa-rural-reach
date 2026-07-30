@@ -51,9 +51,7 @@ export function useVoice(
     };
 
     recognition.onerror = () => setVoiceState("idle");
-    recognition.onend   = () => {
-      if (voiceState === "listening") setVoiceState("idle");
-    };
+    recognition.onend = () => setVoiceState("idle");
 
     recognition.start();
   }, [lang, voiceState, onResult, onAutoSubmit]);
