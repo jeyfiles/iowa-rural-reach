@@ -131,8 +131,14 @@ function ClinicDetailInner() {
   const id           = params.id as string;
   const langParam    = (searchParams.get("lang") ?? "en") as "en" | "es";
 
-  const [lang, setLang]           = useState<"en"|"es">(langParam);
-  const [isMobile, setIsMobile]   = useState(false);
+  const [lang, setLang] = useState<"en"|"es">(langParam);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("rrLang") as "en"|"es" | null;
+    if (saved) setLang(saved);
+  }, []);
+
   const [activeTab, setActiveTab] = useState<"details"|"insurance"|"prep">("details");
 
   useEffect(() => {

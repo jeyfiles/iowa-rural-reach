@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { COLORS as C, FONTS as F, CATEGORIES } from "../lib/constants";
 import { MOCK_CLINICS } from "../lib/mockClinics";
 import { Clinic } from "../lib/types";
+import { useVoice } from "../lib/useVoice";
+import { VoiceButton } from "../lib/VoiceButton";
 
 function IconStethoscope({ size = 20 }: { size?: number }) {
   return (
@@ -144,9 +146,7 @@ function getTypeProps(type: Clinic["type"]) {
   return map[type];
 }
 
-function GoogleMap({
-  clinics, isMobile, onSelectClinic, selectedId,
-}: {
+function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId }: {
   clinics: Clinic[]; isMobile: boolean;
   onSelectClinic: (clinic: Clinic) => void; selectedId: string | null;
 }) {
@@ -157,12 +157,9 @@ function GoogleMap({
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
     if (!apiKey || !mapRef.current) return;
-
     if (window.google && window.google.maps) { initMap(); return; }
-
     const existing = document.querySelector("script[data-gmaps]");
     if (existing) { existing.addEventListener("load", initMap); return; }
-
     const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
     script.async = true;
@@ -185,13 +182,10 @@ function GoogleMap({
       mapObjRef.current = map;
       markersRef.current.forEach(m => m.setMap(null));
       markersRef.current = [];
-
       clinics.forEach(clinic => {
         const tp = getTypeProps(clinic.type);
         const marker = new window.google.maps.Marker({
-          position: { lat: clinic.lat, lng: clinic.lng },
-          map,
-          title: clinic.name,
+          position: { lat: clinic.lat, lng: clinic.lng }, map, title: clinic.name,
           icon: {
             path: window.google.maps.SymbolPath.CIRCLE,
             fillColor: tp.pinColor, fillOpacity: 1,
@@ -199,18 +193,16 @@ function GoogleMap({
             scale: selectedId === clinic.id ? 14 : 10,
           },
         });
-
         const infoWindow = new window.google.maps.InfoWindow({
-          content: `
-            <div style="font-family:'Roboto',sans-serif;padding:4px;min-width:200px;">
-              <div style="font-family:'Antonio',sans-serif;font-size:15px;font-weight:700;color:#0A1F62;margin-bottom:4px;">${clinic.name}</div>
-              <div style="font-size:12px;color:#5A6A8A;margin-bottom:6px;">${clinic.address}</div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <span style="font-size:11px;font-weight:500;color:${tp.color};background:${tp.bg};padding:2px 8px;border-radius:4px;">${tp.label}</span>
-                <span style="font-size:11px;font-weight:500;color:${clinic.open ? "#166534" : "#6B7280"};background:${clinic.open ? "#DCFCE7" : "#F3F4F6"};padding:2px 8px;border-radius:4px;">${clinic.open ? "Open Now" : "Closed"}</span>
-              </div>
-              <div style="margin-top:8px;font-size:12px;font-weight:600;color:#0A1F62;">${clinic.distance} away</div>
-            </div>`,
+          content: `<div style="font-family:'Roboto',sans-serif;padding:4px;min-width:200px;">
+            <div style="font-family:'Antonio',sans-serif;font-size:15px;font-weight:700;color:#0A1F62;margin-bottom:4px;">${clinic.name}</div>
+            <div style="font-size:12px;color:#5A6A8A;margin-bottom:6px;">${clinic.address}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:11px;font-weight:500;color:${tp.color};background:${tp.bg};padding:2px 8px;border-radius:4px;">${tp.label}</span>
+              <span style="font-size:11px;font-weight:500;color:${clinic.open ? "#166534" : "#6B7280"};background:${clinic.open ? "#DCFCE7" : "#F3F4F6"};padding:2px 8px;border-radius:4px;">${clinic.open ? "Open Now" : "Closed"}</span>
+            </div>
+            <div style="margin-top:8px;font-size:12px;font-weight:600;color:#0A1F62;">${clinic.distance} away</div>
+          </div>`,
         });
         marker.addListener("click", () => { onSelectClinic(clinic); infoWindow.open(map, marker); });
         markersRef.current.push(marker);
@@ -272,8 +264,7 @@ function MiniCard({ clinic, isMobile, lang, onClick, selected }: {
           justifyContent: "center", gap: 8, padding: "9px", borderRadius: 4,
           background: C.iBlue, color: C.iWhite, border: "none",
           fontFamily: F.body, fontSize: 13, fontWeight: 500, cursor: "pointer", minHeight: 44 }}>
-          <IconPhone size={15} />
-          {lang === "en" ? "Call" : "Llamar"}
+          <IconPhone size={15} /> {lang === "en" ? "Call" : "Llamar"}
         </button>
       </a>
     </div>
@@ -365,10 +356,10 @@ function ClinicCard({ clinic, isMobile, lang, onClick }: {
         <div style={{ display: "flex", gap: 10 }}>
           <a href={"tel:" + clinic.phone} onClick={e => e.stopPropagation()}
             style={{ textDecoration: "none", flex: 1 }}>
-            <button style={{ width: "100%", display: "flex",
-              alignItems: "center", justifyContent: "center", gap: 8,
-              padding: "11px", borderRadius: 4, background: C.iBlue, color: C.iWhite,
-              border: "none", fontFamily: F.body, fontSize: isMobile ? 14 : 15,
+            <button style={{ width: "100%", display: "flex", alignItems: "center",
+              justifyContent: "center", gap: 8, padding: "11px", borderRadius: 4,
+              background: C.iBlue, color: C.iWhite, border: "none",
+              fontFamily: F.body, fontSize: isMobile ? 14 : 15,
               fontWeight: 500, cursor: "pointer", minHeight: 48 }}>
               <IconPhone /> {lang === "en" ? "Call" : "Llamar"}
             </button>
@@ -376,9 +367,9 @@ function ClinicCard({ clinic, isMobile, lang, onClick }: {
           <a href={"https://maps.google.com/?q=" + encodeURIComponent(clinic.address)}
             target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
             style={{ textDecoration: "none", flex: 1 }}>
-            <button style={{ width: "100%", display: "flex",
-              alignItems: "center", justifyContent: "center", gap: 8,
-              padding: "11px", borderRadius: 4, background: C.iWhite, color: C.iBlue,
+            <button style={{ width: "100%", display: "flex", alignItems: "center",
+              justifyContent: "center", gap: 8, padding: "11px", borderRadius: 4,
+              background: C.iWhite, color: C.iBlue,
               border: "1.5px solid " + C.iBlue, fontFamily: F.body,
               fontSize: isMobile ? 14 : 15, fontWeight: 500, cursor: "pointer", minHeight: 48 }}>
               <IconMapPin /> {lang === "en" ? "Directions" : "Como llegar"}
@@ -391,25 +382,40 @@ function ClinicCard({ clinic, isMobile, lang, onClick }: {
 }
 
 function ResultsInner() {
-  const router   = useRouter();
-  const params   = useSearchParams();
-  const query    = params.get("q") ?? "";
-  const catParam = params.get("cat") ?? "";
+  const router    = useRouter();
+  const params    = useSearchParams();
+  const query     = params.get("q") ?? "";
+  const catParam  = params.get("cat") ?? "";
   const langParam = (params.get("lang") ?? "en") as "en" | "es";
 
   const [lang, setLang]             = useState<"en"|"es">(langParam);
+  const [searchQuery, setSearchQuery] = useState(query);
   const [isMobile, setIsMobile]     = useState(false);
   const [activeType, setActiveType] = useState<string>(catParam);
   const [vetOnly, setVetOnly]       = useState(false);
   const [viewMode, setViewMode]     = useState<"list"|"map">("list");
   const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
 
+  // Load saved language
+  useEffect(() => {
+    const saved = localStorage.getItem("rrLang") as "en"|"es" | null;
+    if (saved) setLang(saved);
+  }, []);
+
+  // Mobile detection
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  // Voice hook — sets search query and auto-navigates
+  const { voiceState, start: startVoice } = useVoice(
+    lang,
+    (text) => setSearchQuery(text),
+    (text) => router.push(`/results?q=${encodeURIComponent(text)}&lang=${lang}`)
+  );
 
   const filtered = MOCK_CLINICS.filter(c => {
     if (vetOnly)    return c.type === "veteran";
@@ -442,7 +448,6 @@ function ResultsInner() {
             Iowa Rural Reach
           </span>
         </div>
-        {/* Language indicator — not a toggle, just shows current lang */}
         <div style={{ fontSize: 13, fontFamily: F.body,
           padding: "6px 12px", borderRadius: 4,
           border: "1px solid #3A5A9A", color: "#A8B8D8" }}>
@@ -450,25 +455,30 @@ function ResultsInner() {
         </div>
       </nav>
 
-      {/* SEARCH BAR */}
+      {/* SEARCH BAR — now with voice button */}
       <div style={{ background: C.iWhite, borderBottom: "1px solid " + C.border,
         padding: isMobile ? "12px 18px" : "14px 48px",
         display: "flex", alignItems: "center", gap: 12 }}>
+
+        {/* Voice button inside search area */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10,
           background: C.card, borderRadius: 4, border: "1px solid " + C.border,
-          padding: "10px 16px", minHeight: 48 }}>
-          <IconMapPin size={16} />
+          padding: "6px 16px", minHeight: 52 }}>
+          <VoiceButton voiceState={voiceState} onStart={startVoice} size={36} />
           <span style={{ fontFamily: F.body, fontSize: isMobile ? 14 : 16,
-            color: query ? C.t2 : C.t4 }}>
-            {query || (lang === "en" ? "Search for care near you..." : "Buscar atencion...")}
+            color: searchQuery ? C.t2 : C.t4, flex: 1 }}>
+            {voiceState === "listening"
+              ? (lang === "en" ? "Listening... speak now" : "Escuchando... hable ahora")
+              : searchQuery || (lang === "en" ? "Search for care near you..." : "Buscar atencion...")}
           </span>
         </div>
+
         <button onClick={() => router.push(`/?lang=${lang}`)}
           style={{ background: C.iBlue, color: C.iWhite, border: "none", borderRadius: 4,
             padding: isMobile ? "10px 14px" : "12px 24px",
             fontFamily: F.heading, fontSize: isMobile ? 13 : 15,
             fontWeight: 700, cursor: "pointer", letterSpacing: "0.04em",
-            minHeight: 48, whiteSpace: "nowrap" }}>
+            minHeight: 52, whiteSpace: "nowrap" }}>
           {lang === "en" ? "New Search" : "Nueva Busqueda"}
         </button>
       </div>

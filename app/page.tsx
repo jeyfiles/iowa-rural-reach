@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { COLORS as C, FONTS as F, CATEGORIES } from "./lib/constants";
+import { useVoice } from "./lib/useVoice";
+import { VoiceButton } from "./lib/VoiceButton";
 
 function IconStethoscope() {
   return (
@@ -66,16 +68,6 @@ function IconHeart() {
   );
 }
 
-function IconMic() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect width="8" height="14" x="8" y="2" rx="4"/>
-      <path d="M4 13a8 8 0 0 0 16 0M12 19v4M8 23h8"/>
-    </svg>
-  );
-}
-
 function IconAccessibility() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -115,6 +107,13 @@ export default function Home() {
   const [activeIdx, setActiveIdx] = useState<number|null>(null);
   const [isMobile, setIsMobile]   = useState(false);
 
+  // Load saved language on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("rrLang") as "en"|"es" | null;
+    if (saved) setLang(saved);
+  }, []);
+
+  // Mobile detection
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
@@ -122,33 +121,10 @@ export default function Home() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  const t = {
-    appSub:      lang === "en" ? "Iowa AI Health Care Finder" : "Buscador de Atencion Medica con IA",
-    heading:     lang === "en" ? "What kind of care do you need?" : "Que tipo de atencion necesita?",
-    sub:         lang === "en" ? "Describe your situation and we will find the right care near you." : "Describa su situacion y encontraremos opciones cerca de usted.",
-    placeholder: lang === "en" ? "e.g. I need a doctor who takes Medicaid in Muscatine" : "ej. Necesito un medico que acepte Medicaid",
-    mic:         lang === "en" ? "Or speak"  : "O hable",
-    cta:         lang === "en" ? "Find Care" : "Buscar",
-    aiNav:       lang === "en" ? "Ask AI Navigator" : "Preguntar al IA",
-    orPick:      lang === "en" ? "Or choose a category" : "O elija una categoria",
-    howTitle:    lang === "en" ? "How Iowa Rural Reach helps" : "Como ayuda Iowa Rural Reach",
-    card1Title:  lang === "en" ? "Find the right match"   : "Encuentre la opcion correcta",
-    card1Body:   lang === "en" ? "Filter by insurance, cost, language, and distance - not just what is nearest." : "Filtre por seguro, costo, idioma y distancia.",
-    card2Title:  lang === "en" ? "Veterans care included" : "Atencion para veteranos",
-    card2Body:   lang === "en" ? "Dedicated layer for VA facilities, Vet Centers, and benefits offices near you." : "Capa dedicada para instalaciones VA y oficinas de beneficios.",
-    card3Title:  lang === "en" ? "AI Care Navigator"      : "Navegador de Atencion IA",
-    card3Body:   lang === "en" ? "Speak or type your situation. Get personalized care recommendations instantly." : "Hable o escriba su situacion y reciba recomendaciones personalizadas.",
-  };
-
-  function handleVoice() {
-    if (!("webkitSpeechRecognition" in window)) {
-      alert("Voice input requires Chrome browser.");
-      return;
-    }
-    const recognition = new (window as any).webkitSpeechRecognition();
-    recognition.lang = lang === "es" ? "es-US" : "en-US";
-    recognition.onresult = (e: any) => setQuery(e.results[0][0].transcript);
-    recognition.start();
+  function toggleLang() {
+    const next = lang === "en" ? "es" : "en";
+    setLang(next);
+    localStorage.setItem("rrLang", next);
   }
 
   function handleFindCare() {
@@ -163,6 +139,34 @@ export default function Home() {
       router.push(`/results?cat=${catId}&lang=${lang}`);
     }
   }
+
+  // Voice hook — sets query and auto-submits
+  const { voiceState, start: startVoice } = useVoice(
+    lang,
+    (text) => setQuery(text),
+    (text) => {
+      const cat = activeIdx !== null ? CATEGORIES[activeIdx].id : "";
+      router.push(`/results?q=${encodeURIComponent(text)}&cat=${cat}&lang=${lang}`);
+    }
+  );
+
+  const t = {
+    appSub:      lang === "en" ? "Iowa AI Health Care Finder" : "Buscador de Atencion Medica con IA",
+    heading:     lang === "en" ? "What kind of care do you need?" : "Que tipo de atencion necesita?",
+    sub:         lang === "en" ? "Describe your situation and we will find the right care near you." : "Describa su situacion y encontraremos opciones cerca de usted.",
+    placeholder: lang === "en" ? "e.g. I need a doctor who takes Medicaid in Muscatine" : "ej. Necesito un medico que acepte Medicaid",
+    mic:         lang === "en" ? "Or speak" : "O hable",
+    cta:         lang === "en" ? "Find Care" : "Buscar",
+    aiNav:       lang === "en" ? "Ask AI Navigator" : "Preguntar al IA",
+    orPick:      lang === "en" ? "Or choose a category" : "O elija una categoria",
+    howTitle:    lang === "en" ? "How Iowa Rural Reach helps" : "Como ayuda Iowa Rural Reach",
+    card1Title:  lang === "en" ? "Find the right match"   : "Encuentre la opcion correcta",
+    card1Body:   lang === "en" ? "Filter by insurance, cost, language, and distance - not just what is nearest." : "Filtre por seguro, costo, idioma y distancia.",
+    card2Title:  lang === "en" ? "Veterans care included" : "Atencion para veteranos",
+    card2Body:   lang === "en" ? "Dedicated layer for VA facilities, Vet Centers, and benefits offices near you." : "Capa dedicada para instalaciones VA y oficinas de beneficios.",
+    card3Title:  lang === "en" ? "AI Care Navigator"      : "Navegador de Atencion IA",
+    card3Body:   lang === "en" ? "Speak or type your situation. Get personalized care recommendations instantly." : "Hable o escriba su situacion y reciba recomendaciones personalizadas.",
+  };
 
   const px          = isMobile ? "18px" : "56px";
   const headingSize = isMobile ? 28      : 46;
@@ -191,7 +195,7 @@ export default function Home() {
           )}
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button onClick={() => setLang(lang === "en" ? "es" : "en")}
+          <button onClick={toggleLang}
             style={{ fontSize: isMobile ? 13 : 14, fontFamily: F.body,
               padding: isMobile ? "6px 12px" : "7px 16px", borderRadius: 4,
               border: "1px solid #3A5A9A", background: "transparent",
@@ -235,7 +239,12 @@ export default function Home() {
             <textarea
               value={query}
               onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleFindCare(); }}}
+              onKeyDown={e => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleFindCare();
+                }
+              }}
               placeholder={t.placeholder}
               rows={3}
               aria-label="Describe what care you need"
@@ -252,15 +261,12 @@ export default function Home() {
               padding: isMobile ? "10px 14px 10px" : "12px 18px 10px",
               borderTop: "1px solid " + C.border,
               background: "#FAFBFF" }}>
-              <button onClick={handleVoice}
-                aria-label="Use voice input"
-                style={{ display: "flex", alignItems: "center", gap: 8,
-                  background: "none", border: "1px solid " + C.border,
-                  borderRadius: 4, padding: "9px 16px",
-                  fontSize: isMobile ? 14 : 15, fontFamily: F.body,
-                  color: C.t3, cursor: "pointer", minHeight: 44 }}>
-                <IconMic /> {t.mic}
-              </button>
+              <VoiceButton
+                voiceState={voiceState}
+                onStart={startVoice}
+                size={44}
+                label={t.mic}
+              />
               <button
                 onClick={handleFindCare}
                 aria-label="Find care"

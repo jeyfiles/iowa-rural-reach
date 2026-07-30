@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { COLORS as C, FONTS as F } from "../lib/constants";
+import { useVoice } from "../lib/useVoice";
+import { VoiceButton } from "../lib/VoiceButton";
 
 interface Message {
   role: "user" | "ai";
@@ -24,16 +26,6 @@ function IconSend() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
-    </svg>
-  );
-}
-
-function IconMic() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect width="8" height="14" x="8" y="2" rx="4"/>
-      <path d="M4 13a8 8 0 0 0 16 0M12 19v4M8 23h8"/>
     </svg>
   );
 }
@@ -107,6 +99,13 @@ function NavigatorInner() {
       : "Hola! Soy el Navegador de Atencion IA de Iowa Rural Reach. Cuenteme su situacion y le ayudare a encontrar la atencion adecuada cerca de usted.",
   }]);
 
+  // Load saved language
+  useEffect(() => {
+    const saved = localStorage.getItem("rrLang") as "en"|"es" | null;
+    if (saved) setLang(saved);
+  }, []);
+
+  // Mobile detection
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
@@ -114,6 +113,7 @@ function NavigatorInner() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // Auto scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -151,20 +151,12 @@ function NavigatorInner() {
     }
   }
 
-  function handleVoice() {
-    if (!("webkitSpeechRecognition" in window)) {
-      alert("Voice input requires Chrome browser.");
-      return;
-    }
-    const recognition = new (window as any).webkitSpeechRecognition();
-    recognition.lang = lang === "es" ? "es-US" : "en-US";
-    recognition.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript;
-      setInput(transcript);
-      sendMessage(transcript);
-    };
-    recognition.start();
-  }
+  // Voice hook — sets input and auto-sends message
+  const { voiceState, start: startVoice } = useVoice(
+    lang,
+    (text) => setInput(text),
+    (text) => sendMessage(text)
+  );
 
   const px = isMobile ? "18px" : "48px";
 
@@ -221,7 +213,9 @@ function NavigatorInner() {
               {lang === "en" ? "AI Care Navigator" : "Navegador de Atencion IA"}
             </div>
             <div style={{ fontFamily: F.body, fontSize: 12, color: C.t3 }}>
-              {lang === "en" ? "Powered by Claude AI - Not medical advice" : "Con tecnologia Claude IA - No es consejo medico"}
+              {lang === "en"
+                ? "Powered by Claude AI - Not medical advice"
+                : "Con tecnologia Claude IA - No es consejo medico"}
             </div>
           </div>
         </div>
@@ -264,6 +258,7 @@ function NavigatorInner() {
           </div>
         ))}
 
+        {/* Suggested prompts — show only at start */}
         {messages.length === 1 && (
           <div style={{ marginTop: 8 }}>
             <div style={{ fontFamily: F.body, fontSize: 13, color: C.t3, marginBottom: 10 }}>
@@ -282,6 +277,25 @@ function NavigatorInner() {
             </div>
           </div>
         )}
+
+        {/* Voice listening indicator in chat area */}
+        {voiceState === "listening" && (
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 20px", borderRadius: 24,
+              background: C.redL, border: "1px solid " + C.iRed }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%",
+                background: C.iRed,
+                animation: "pulse 1s ease-in-out infinite" }} />
+              <span style={{ fontFamily: F.body, fontSize: 14,
+                color: C.iRed, fontWeight: 500 }}>
+                {lang === "en" ? "Listening... speak now" : "Escuchando... hable ahora"}
+              </span>
+              <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+            </div>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -294,9 +308,11 @@ function NavigatorInner() {
             borderRadius: 6, background: C.redL, border: "1px solid " + C.iRed }}>
             <div style={{ width: 32, height: 32, borderRadius: 4, background: C.iRed,
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span style={{ fontFamily: F.heading, fontSize: 12, fontWeight: 700, color: C.iWhite }}>911</span>
+              <span style={{ fontFamily: F.heading, fontSize: 12,
+                fontWeight: 700, color: C.iWhite }}>911</span>
             </div>
-            <span style={{ fontFamily: F.body, fontSize: isMobile ? 12 : 13, color: C.iRed, fontWeight: 500 }}>
+            <span style={{ fontFamily: F.body, fontSize: isMobile ? 12 : 13,
+              color: C.iRed, fontWeight: 500 }}>
               {lang === "en" ? "Physical Emergency" : "Emergencia Fisica"}
             </span>
           </div>
@@ -306,9 +322,11 @@ function NavigatorInner() {
             borderRadius: 6, background: C.blueL, border: "1px solid " + C.iBlue }}>
             <div style={{ width: 32, height: 32, borderRadius: 4, background: C.iBlue,
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span style={{ fontFamily: F.heading, fontSize: 12, fontWeight: 700, color: C.iWhite }}>988</span>
+              <span style={{ fontFamily: F.heading, fontSize: 12,
+                fontWeight: 700, color: C.iWhite }}>988</span>
             </div>
-            <span style={{ fontFamily: F.body, fontSize: isMobile ? 12 : 13, color: C.iBlue, fontWeight: 500 }}>
+            <span style={{ fontFamily: F.body, fontSize: isMobile ? 12 : 13,
+              color: C.iBlue, fontWeight: 500 }}>
               {lang === "en" ? "Mental Health Crisis" : "Crisis de Salud Mental"}
             </span>
           </div>
@@ -318,27 +336,44 @@ function NavigatorInner() {
       {/* INPUT BAR */}
       <div style={{ background: C.iWhite, borderTop: "1px solid " + C.border,
         padding: isMobile ? "12px 18px" : "14px 48px",
-        display: "flex", gap: 10, alignItems: "flex-end", flexShrink: 0 }}>
-        <button onClick={handleVoice} aria-label="Voice input"
-          style={{ width: 48, height: 48, borderRadius: 4, flexShrink: 0,
-            border: "1.5px solid " + C.border, background: C.card, color: C.t2,
-            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <IconMic />
-        </button>
-        <textarea ref={inputRef} value={input}
+        display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
+
+        {/* New VoiceButton — round, pulsing, turns red when listening */}
+        <VoiceButton
+          voiceState={voiceState}
+          onStart={startVoice}
+          size={48}
+        />
+
+        <textarea
+          ref={inputRef}
+          value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }}}
-          placeholder={lang === "en" ? "Describe your situation or ask a question..." : "Describa su situacion o haga una pregunta..."}
+          onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              sendMessage(input);
+            }
+          }}
+          placeholder={lang === "en"
+            ? "Describe your situation or ask a question..."
+            : "Describa su situacion o haga una pregunta..."}
           rows={1}
           style={{ flex: 1, border: "1.5px solid " + C.border, borderRadius: 4,
-            padding: "12px 14px", fontSize: isMobile ? 15 : 16, fontFamily: F.body,
-            color: C.t2, background: C.card, outline: "none", resize: "none",
-            lineHeight: 1.5, minHeight: 48, boxSizing: "border-box" }} />
-        <button onClick={() => sendMessage(input)} disabled={loading || !input.trim()}
+            padding: "12px 14px", fontSize: isMobile ? 15 : 16,
+            fontFamily: F.body, color: C.t2, background: C.card,
+            outline: "none", resize: "none", lineHeight: 1.5,
+            minHeight: 48, boxSizing: "border-box" }} />
+
+        <button
+          onClick={() => sendMessage(input)}
+          disabled={loading || !input.trim()}
           aria-label="Send message"
-          style={{ width: 48, height: 48, borderRadius: 4, flexShrink: 0, border: "none",
+          style={{ width: 48, height: 48, borderRadius: "50%", flexShrink: 0,
+            border: "none",
             background: loading || !input.trim() ? C.border : C.iBlue,
-            color: C.iWhite, cursor: loading || !input.trim() ? "not-allowed" : "pointer",
+            color: C.iWhite,
+            cursor: loading || !input.trim() ? "not-allowed" : "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
             transition: "background 0.15s" }}>
           <IconSend />
