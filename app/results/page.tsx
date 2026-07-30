@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { COLORS as C, FONTS as F, CATEGORIES } from "../lib/constants";
-import { MOCK_CLINICS } from "../lib/mockClinics";
+// import { MOCK_CLINICS } from "../lib/mockClinics"; // kept for reference / fallback
 import { Clinic } from "../lib/types";
 import { useVoice } from "../lib/useVoice";
 import { VoiceButton } from "../lib/VoiceButton";
@@ -146,9 +146,45 @@ function getTypeProps(type: Clinic["type"]) {
   return map[type];
 }
 
-function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId }: {
+// ── Loading skeleton ─────────────────────────────────────────────
+function LoadingSkeleton({ isMobile }: { isMobile: boolean }) {
+  return (
+    <div style={{ padding: isMobile ? "20px 18px" : "32px 48px" }}>
+      <div style={{ fontFamily: F.body, fontSize: 14, color: C.t3,
+        marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 16, height: 16, borderRadius: "50%",
+          border: "2px solid " + C.iBlue, borderTopColor: "transparent",
+          animation: "spin 0.8s linear infinite" }} />
+        Finding care near you...
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+      <div style={{ display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)",
+        gap: isMobile ? 16 : 20 }}>
+        {[1,2,3,4].map(i => (
+          <div key={i} style={{ background: C.iWhite, borderRadius: 6,
+            border: "1.5px solid " + C.border, overflow: "hidden", height: 200,
+            animation: "pulse 1.5s ease-in-out infinite" }}>
+            <div style={{ height: 4, background: C.border }} />
+            <div style={{ padding: "20px 24px" }}>
+              <div style={{ height: 20, background: C.card, borderRadius: 4, marginBottom: 12, width: "70%" }} />
+              <div style={{ height: 14, background: C.card, borderRadius: 4, marginBottom: 8, width: "50%" }} />
+              <div style={{ height: 14, background: C.card, borderRadius: 4, width: "90%" }} />
+            </div>
+            <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }`}</style>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Google Map ───────────────────────────────────────────────────
+function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId, centerLat, centerLng }: {
   clinics: Clinic[]; isMobile: boolean;
-  onSelectClinic: (clinic: Clinic) => void; selectedId: string | null;
+  onSelectClinic: (clinic: Clinic) => void;
+  selectedId: string | null;
+  centerLat: number; centerLng: number;
 }) {
   const mapRef     = useRef<HTMLDivElement>(null);
   const mapObjRef  = useRef<google.maps.Map | null>(null);
@@ -169,7 +205,7 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId }: {
 
     function initMap() {
       if (!mapRef.current) return;
-      const center = { lat: 41.4245, lng: -91.0432 };
+      const center = { lat: centerLat, lng: centerLng };
       const map = new window.google.maps.Map(mapRef.current, {
         center, zoom: 10,
         mapTypeControl: false, fullscreenControl: false, streetViewControl: false,
@@ -208,7 +244,7 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId }: {
         markersRef.current.push(marker);
       });
     }
-  }, [clinics, selectedId]);
+  }, [clinics, selectedId, centerLat, centerLng]);
 
   return (
     <div ref={mapRef} style={{
@@ -218,6 +254,7 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId }: {
   );
 }
 
+// ── Mini card for map sidebar ────────────────────────────────────
 function MiniCard({ clinic, isMobile, lang, onClick, selected }: {
   clinic: Clinic; isMobile: boolean; lang: "en"|"es"; onClick: () => void; selected: boolean;
 }) {
@@ -271,6 +308,7 @@ function MiniCard({ clinic, isMobile, lang, onClick, selected }: {
   );
 }
 
+// ── Full clinic card ─────────────────────────────────────────────
 function ClinicCard({ clinic, isMobile, lang, onClick }: {
   clinic: Clinic; isMobile: boolean; lang: "en"|"es"; onClick: () => void;
 }) {
@@ -381,6 +419,7 @@ function ClinicCard({ clinic, isMobile, lang, onClick }: {
   );
 }
 
+// ── Results Inner ────────────────────────────────────────────────
 function ResultsInner() {
   const router    = useRouter();
   const params    = useSearchParams();
@@ -388,13 +427,21 @@ function ResultsInner() {
   const catParam  = params.get("cat") ?? "";
   const langParam = (params.get("lang") ?? "en") as "en" | "es";
 
-  const [lang, setLang]             = useState<"en"|"es">(langParam);
+  const [lang, setLang]               = useState<"en"|"es">(langParam);
   const [searchQuery, setSearchQuery] = useState(query);
-  const [isMobile, setIsMobile]     = useState(false);
-  const [activeType, setActiveType] = useState<string>(catParam);
-  const [vetOnly, setVetOnly]       = useState(false);
-  const [viewMode, setViewMode]     = useState<"list"|"map">("list");
+  const [isMobile, setIsMobile]       = useState(false);
+  const [activeType, setActiveType]   = useState<string>(catParam);
+  const [vetOnly, setVetOnly]         = useState(false);
+  const [viewMode, setViewMode]       = useState<"list"|"map">("list");
   const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
+
+  // ── Real API state ─────────────────────────────────────────────
+  const [allClinics, setAllClinics]       = useState<Clinic[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [apiError, setApiError]           = useState(false);
+  const [centerLat, setCenterLat]         = useState(41.4245);
+  const [centerLng, setCenterLng]         = useState(-91.0432);
+  const [locationLabel, setLocationLabel] = useState("Muscatine, IA");
 
   // Load saved language
   useEffect(() => {
@@ -410,15 +457,79 @@ function ResultsInner() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // Voice hook — sets search query and auto-navigates
+  // ── Fetch real clinics from API ────────────────────────────────
+  // Old mock approach — commented out for reference:
+  // const filtered = MOCK_CLINICS.filter(c => {
+  //   if (vetOnly)    return c.type === "veteran";
+  //   if (activeType) return c.type === activeType;
+  //   return true;
+  // });
+  useEffect(() => {
+    async function loadClinics() {
+      setLoading(true);
+      setApiError(false);
+      try {
+        // Step 1 — geocode the query to lat/lng
+        const geoQuery = query || "Muscatine Iowa";
+        const geoRes   = await fetch(`/api/geocode?address=${encodeURIComponent(geoQuery)}`);
+        const geoData  = await geoRes.json();
+        const lat = geoData.lat || 41.4245;
+        const lng = geoData.lng || -91.0432;
+        setCenterLat(lat);
+        setCenterLng(lng);
+        if (geoData.formattedAddress) setLocationLabel(geoData.formattedAddress);
+
+        // Step 2 — fetch real clinicsand map catParam to API query keywords so category buttons work
+        const catQueryMap: Record<string, string> = {
+          family:    "doctor primary family",
+          mental:    "mental health counseling",
+          dental:    "dental dentist",
+          veteran:   "veteran va military",
+          er:        "emergency hospital urgent",
+          uninsured: "uninsured sliding scale",
+        };
+        // Use text query if provided, otherwise use category keyword mapping
+        const apiQuery = query || catQueryMap[catParam] || "";
+        const clinicsRes = await fetch(`/api/clinics?lat=${lat}&lng=${lng}&query=${encodeURIComponent(apiQuery)}`);
+
+        const clinicsData = await clinicsRes.json();
+
+        if (clinicsData.clinics?.length) {
+          setAllClinics(clinicsData.clinics);
+        } else {
+          // Fallback: uncomment below to use mock data when APIs return nothing
+          // const { MOCK_CLINICS } = await import("../lib/mockClinics");
+          // setAllClinics(MOCK_CLINICS);
+          setAllClinics([]);
+        }
+      } catch (err) {
+        console.error("Failed to load clinics:", err);
+        setApiError(true);
+        // Fallback: uncomment below to use mock data on error
+        // const { MOCK_CLINICS } = await import("../lib/mockClinics");
+        // setAllClinics(MOCK_CLINICS);
+        setAllClinics([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadClinics();
+  },  [query, catParam]);
+
+  // Voice hook
   const { voiceState, start: startVoice } = useVoice(
     lang,
     (text) => setSearchQuery(text),
     (text) => router.push(`/results?q=${encodeURIComponent(text)}&lang=${lang}`)
   );
 
-  const filtered = MOCK_CLINICS.filter(c => {
-    if (vetOnly)    return c.type === "veteran";
+  // Filter real API results by category / veterans toggle
+  const filtered = allClinics.filter(c => {
+    if (vetOnly) return c.type === "veteran";
+    if (activeType === "uninsured") {
+      // No Insurance filter shows both uninsured-tagged AND sliding scale family clinics
+      return c.type === "uninsured" || (c.type === "family" && c.sliding);
+    }
     if (activeType) return c.type === activeType;
     return true;
   });
@@ -455,12 +566,10 @@ function ResultsInner() {
         </div>
       </nav>
 
-      {/* SEARCH BAR — now with voice button */}
+      {/* SEARCH BAR */}
       <div style={{ background: C.iWhite, borderBottom: "1px solid " + C.border,
         padding: isMobile ? "12px 18px" : "14px 48px",
         display: "flex", alignItems: "center", gap: 12 }}>
-
-        {/* Voice button inside search area */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10,
           background: C.card, borderRadius: 4, border: "1px solid " + C.border,
           padding: "6px 16px", minHeight: 52 }}>
@@ -471,8 +580,14 @@ function ResultsInner() {
               ? (lang === "en" ? "Listening... speak now" : "Escuchando... hable ahora")
               : searchQuery || (lang === "en" ? "Search for care near you..." : "Buscar atencion...")}
           </span>
+          {!loading && locationLabel && (
+            <span style={{ fontFamily: F.body, fontSize: 12,
+              color: C.t4, whiteSpace: "nowrap",
+              display: isMobile ? "none" : "block" }}>
+              Near: {locationLabel}
+            </span>
+          )}
         </div>
-
         <button onClick={() => router.push(`/?lang=${lang}`)}
           style={{ background: C.iBlue, color: C.iWhite, border: "none", borderRadius: 4,
             padding: isMobile ? "10px 14px" : "12px 24px",
@@ -530,7 +645,6 @@ function ResultsInner() {
           {lang === "en" ? "Veterans" : "Veteranos"}
         </button>
 
-        {/* List / Map toggle */}
         <div style={{ marginLeft: "auto", display: "flex",
           border: "1.5px solid " + C.border, borderRadius: 4,
           overflow: "hidden", flexShrink: 0 }}>
@@ -559,8 +673,26 @@ function ResultsInner() {
         </div>
       </div>
 
+      {/* LOADING */}
+      {loading && viewMode === "list" && <LoadingSkeleton isMobile={isMobile} />}
+
+      {/* API ERROR */}
+      {apiError && !loading && (
+        <div style={{ padding: isMobile ? "20px 18px" : "32px 48px", textAlign: "center" }}>
+          <div style={{ fontFamily: F.heading, fontSize: 20, color: C.t3, marginBottom: 12 }}>
+            {lang === "en" ? "Could not load clinics. Please try again." : "No se pudieron cargar las clinicas."}
+          </div>
+          <button onClick={() => window.location.reload()}
+            style={{ background: C.iBlue, color: C.iWhite, border: "none",
+              borderRadius: 4, padding: "12px 28px", fontFamily: F.heading,
+              fontSize: 16, fontWeight: 700, cursor: "pointer", minHeight: 48 }}>
+            {lang === "en" ? "Try Again" : "Intentar de Nuevo"}
+          </button>
+        </div>
+      )}
+
       {/* LIST VIEW */}
-      {viewMode === "list" && (
+      {viewMode === "list" && !loading && !apiError && (
         <div style={{ padding: isMobile ? "20px 18px" : "32px 48px" }}>
           <div style={{ fontFamily: F.body, fontSize: isMobile ? 14 : 16,
             color: C.t3, marginBottom: 20, fontWeight: 500 }}>
@@ -593,7 +725,7 @@ function ResultsInner() {
       )}
 
       {/* MAP VIEW */}
-      {viewMode === "map" && (
+      {viewMode === "map" && !loading && (
         <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row",
           height: isMobile ? "auto" : "calc(100vh - 200px)" }}>
           <div style={{ width: isMobile ? "100%" : 320, flexShrink: 0,
@@ -611,9 +743,12 @@ function ResultsInner() {
             ))}
           </div>
           <div style={{ flex: 1, order: isMobile ? 1 : 2, minHeight: isMobile ? 340 : "auto" }}>
-            <GoogleMap clinics={filtered} isMobile={isMobile}
+            <GoogleMap
+              clinics={filtered} isMobile={isMobile}
               selectedId={selectedClinic?.id ?? null}
-              onSelectClinic={clinic => setSelectedClinic(clinic)} />
+              onSelectClinic={clinic => setSelectedClinic(clinic)}
+              centerLat={centerLat} centerLng={centerLng}
+            />
             <div style={{ position: "absolute", bottom: isMobile ? "auto" : 100,
               right: isMobile ? "auto" : 60,
               background: "rgba(255,255,255,0.95)", borderRadius: 6,
@@ -643,8 +778,8 @@ function ResultsInner() {
         </div>
       )}
 
-      {/* EMERGENCY FOOTER - list view only */}
-      {viewMode === "list" && (
+      {/* EMERGENCY FOOTER */}
+      {viewMode === "list" && !loading && (
         <div style={{ background: C.iWhite, borderTop: "1px solid " + C.border,
           padding: isMobile ? "16px 18px" : "20px 48px",
           display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12 }}>
