@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { COLORS as C, FONTS as F, CATEGORIES } from "../lib/constants";
+import { translateService, translateInsurance } from "../lib/translations";
 // import { MOCK_CLINICS } from "../lib/mockClinics"; // kept for reference / fallback
 import { Clinic } from "../lib/types";
 import { useVoice } from "../lib/useVoice";
@@ -134,14 +135,15 @@ function IconMap({ size = 18 }: { size?: number }) {
   );
 }
 
-function getTypeProps(type: Clinic["type"]) {
+// ── getTypeProps now accepts lang for translated labels ──────────
+function getTypeProps(type: Clinic["type"], lang: "en"|"es" = "en") {
   const map = {
-    family:    { icon: <IconStethoscope />, color: C.iBlue,   bg: C.blueL,   label: "Family Care",   pinColor: "#0A1F62" },
-    mental:    { icon: <IconBrain />,       color: "#166534", bg: "#DCFCE7", label: "Mental Health", pinColor: "#166534" },
-    dental:    { icon: <IconTooth />,       color: "#6B21A8", bg: "#F3E8FF", label: "Dental",        pinColor: "#6B21A8" },
-    veteran:   { icon: <IconShield />,      color: "#7A5E00", bg: C.goldL,   label: "Veterans Care", pinColor: "#B45309" },
-    er:        { icon: <IconAmbulance />,   color: C.iRed,    bg: C.redL,    label: "Emergency",     pinColor: "#D80025" },
-    uninsured: { icon: <IconHeart />,       color: "#166534", bg: "#DCFCE7", label: "No Insurance",  pinColor: "#166534" },
+    family:    { icon: <IconStethoscope />, color: C.iBlue,   bg: C.blueL,   label: lang === "en" ? "Family Care"   : "Atencion Familiar", pinColor: "#0A1F62" },
+    mental:    { icon: <IconBrain />,       color: "#166534", bg: "#DCFCE7", label: lang === "en" ? "Mental Health" : "Salud Mental",       pinColor: "#166534" },
+    dental:    { icon: <IconTooth />,       color: "#6B21A8", bg: "#F3E8FF", label: lang === "en" ? "Dental"        : "Dental",             pinColor: "#6B21A8" },
+    veteran:   { icon: <IconShield />,      color: "#7A5E00", bg: C.goldL,   label: lang === "en" ? "Veterans Care" : "Veteranos",          pinColor: "#B45309" },
+    er:        { icon: <IconAmbulance />,   color: C.iRed,    bg: C.redL,    label: lang === "en" ? "Emergency"     : "Emergencia",         pinColor: "#D80025" },
+    uninsured: { icon: <IconHeart />,       color: "#166534", bg: "#DCFCE7", label: lang === "en" ? "No Insurance"  : "Sin Seguro",         pinColor: "#166534" },
   };
   return map[type];
 }
@@ -195,16 +197,12 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId, centerLat, c
     if (!apiKey || !mapRef.current) return;
 
     function addMarkers(map: google.maps.Map) {
-      // Clear old markers
       markersRef.current.forEach(m => m.setMap(null));
       markersRef.current = [];
-
       clinics.forEach(clinic => {
-        const tp = getTypeProps(clinic.type);
+        const tp = getTypeProps(clinic.type); // map always uses English labels
         const marker = new window.google.maps.Marker({
-          position: { lat: clinic.lat, lng: clinic.lng },
-          map,
-          title: clinic.name,
+          position: { lat: clinic.lat, lng: clinic.lng }, map, title: clinic.name,
           icon: {
             path: window.google.maps.SymbolPath.CIRCLE,
             fillColor: tp.pinColor, fillOpacity: 1,
@@ -212,7 +210,6 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId, centerLat, c
             scale: selectedId === clinic.id ? 14 : 10,
           },
         });
-
         const infoWindow = new window.google.maps.InfoWindow({
           content: `<div style="font-family:'Roboto',sans-serif;padding:4px;min-width:200px;">
             <div style="font-family:'Antonio',sans-serif;font-size:15px;font-weight:700;color:#0A1F62;margin-bottom:4px;">${clinic.name}</div>
@@ -224,33 +221,20 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId, centerLat, c
             <div style="margin-top:8px;font-size:12px;font-weight:600;color:#0A1F62;">${clinic.distance} away</div>
           </div>`,
         });
-
-        // Open info window immediately on single click — no zoom
-        marker.addListener("mousedown", () => { //marker.addListener("click", () => {
-          onSelectClinic(clinic);
-          infoWindow.open(map, marker);
-        });
-
+        marker.addListener("mousedown", () => { onSelectClinic(clinic); infoWindow.open(map, marker); });
         markersRef.current.push(marker);
       });
     }
 
-    // If map already exists — just update markers, don't recreate the map
-    if (mapObjRef.current) {
-      addMarkers(mapObjRef.current);
-      return;
-    }
+    if (mapObjRef.current) { addMarkers(mapObjRef.current); return; }
 
-    // First time — load script and create map
     function initMap() {
       if (!mapRef.current) return;
-      const center = { lat: centerLat, lng: centerLng };
       const map = new window.google.maps.Map(mapRef.current, {
-        center, zoom: 10,
+        center: { lat: centerLat, lng: centerLng }, zoom: 10,
         mapTypeControl: false, fullscreenControl: false, streetViewControl: false,
         zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER },
-        disableDoubleClickZoom: true,
-        clickableIcons: false,
+        disableDoubleClickZoom: true, clickableIcons: false,
         styles: [
           { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
           { featureType: "transit", stylers: [{ visibility: "off" }] },
@@ -261,15 +245,11 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId, centerLat, c
     }
 
     if (window.google && window.google.maps) { initMap(); return; }
-
     const existing = document.querySelector("script[data-gmaps]");
     if (existing) { existing.addEventListener("load", initMap); return; }
-
     const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
-    script.async = true;
-    script.dataset.gmaps = "true";
-    script.onload = initMap;
+    script.async = true; script.dataset.gmaps = "true"; script.onload = initMap;
     document.head.appendChild(script);
 
   }, [clinics, selectedId, centerLat, centerLng]);
@@ -286,7 +266,7 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId, centerLat, c
 function MiniCard({ clinic, isMobile, lang, onClick, selected }: {
   clinic: Clinic; isMobile: boolean; lang: "en"|"es"; onClick: () => void; selected: boolean;
 }) {
-  const tp = getTypeProps(clinic.type);
+  const tp = getTypeProps(clinic.type, lang);
   return (
     <div onClick={onClick}
       style={{ background: C.iWhite, borderRadius: 6,
@@ -340,7 +320,7 @@ function MiniCard({ clinic, isMobile, lang, onClick, selected }: {
 function ClinicCard({ clinic, isMobile, lang, onClick }: {
   clinic: Clinic; isMobile: boolean; lang: "en"|"es"; onClick: () => void;
 }) {
-  const tp = getTypeProps(clinic.type);
+  const tp = getTypeProps(clinic.type, lang);
   return (
     <div onClick={onClick}
       style={{ background: C.iWhite, borderRadius: 6,
@@ -461,7 +441,6 @@ function ResultsInner() {
   const [viewMode, setViewMode]       = useState<"list"|"map">("list");
   const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
 
-  // ── Real API state ─────────────────────────────────────────────
   const [allClinics, setAllClinics]       = useState<Clinic[]>([]);
   const [loading, setLoading]             = useState(true);
   const [apiError, setApiError]           = useState(false);
@@ -469,13 +448,11 @@ function ResultsInner() {
   const [centerLng, setCenterLng]         = useState(-91.0432);
   const [locationLabel, setLocationLabel] = useState("Muscatine, IA");
 
-  // Load saved language
   useEffect(() => {
     const saved = localStorage.getItem("rrLang") as "en"|"es" | null;
     if (saved) setLang(saved);
   }, []);
 
-  // Mobile detection
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
@@ -483,16 +460,11 @@ function ResultsInner() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // ── Fetch clinics — re-fires when query OR catParam changes ────
-  // Each filter button navigates to /results?cat=X&q=location&lang=Y
-  // which changes catParam in the URL and triggers this effect
   useEffect(() => {
     async function loadClinics() {
       setLoading(true);
       setApiError(false);
       try {
-        // Step 1 — geocode the location from query
-        // Use just the location part if query has category keywords mixed in
         const geoQuery = query || "Muscatine Iowa";
         const geoRes   = await fetch(`/api/geocode?address=${encodeURIComponent(geoQuery)}`);
         const geoData  = await geoRes.json();
@@ -502,9 +474,6 @@ function ResultsInner() {
         setCenterLng(lng);
         if (geoData.formattedAddress) setLocationLabel(geoData.formattedAddress);
 
-        // Step 2 — build API query
-        // catParam takes priority — filter buttons pass cat=X with location in q
-        // If no catParam, use the full text query for intent detection
         const catQueryMap: Record<string, string> = {
           family:    "doctor primary family",
           mental:    "mental health counseling",
@@ -513,13 +482,8 @@ function ResultsInner() {
           er:        "emergency hospital urgent",
           uninsured: "uninsured sliding scale",
         };
-        const apiQuery = catParam
-          ? catQueryMap[catParam] || ""
-          : query;
-
-        const clinicsRes  = await fetch(
-          `/api/clinics?lat=${lat}&lng=${lng}&query=${encodeURIComponent(apiQuery)}`
-        );
+        const apiQuery = catParam ? catQueryMap[catParam] || "" : query;
+        const clinicsRes  = await fetch(`/api/clinics?lat=${lat}&lng=${lng}&query=${encodeURIComponent(apiQuery)}`);
         const clinicsData = await clinicsRes.json();
 
         if (clinicsData.clinics?.length) {
@@ -536,41 +500,31 @@ function ResultsInner() {
       }
     }
     loadClinics();
-  }, [query, catParam]); // re-fetch when query or category changes
+  }, [query, catParam]);
 
-  // Voice hook — navigates to new search preserving lang
   const { voiceState, start: startVoice } = useVoice(
     lang,
     (text) => setSearchQuery(text),
     (text) => router.push(`/results?q=${encodeURIComponent(text)}&lang=${lang}`)
   );
 
-  // ── Filter navigation helper ───────────────────────────────────
-  // Preserves the location query (q) when switching categories
-  // so "Medicaid doctors in Muscatine" → click Dental →
-  // navigates to /results?q=Muscatine&cat=dental&lang=en
-  // This way the location is preserved but category changes
   function navToCategory(cat: string) {
-    // Extract location from query by stripping intent keywords
     const locationQuery = query
       .replace(/\b(doctor|primary|family|medicaid|mental|health|counseling|dental|dentist|veteran|va|military|emergency|hospital|urgent|uninsured|sliding|scale|free|clinic|care|near|in|around)\b/gi, "")
-      .replace(/\s+/g, " ")
-      .trim() || query;
+      .replace(/\s+/g, " ").trim() || query;
 
     if (cat === "") {
-      // All Care — clear category, keep location
       router.push(`/results?q=${encodeURIComponent(locationQuery)}&lang=${lang}`);
     } else {
       router.push(`/results?q=${encodeURIComponent(locationQuery)}&cat=${cat}&lang=${lang}`);
     }
   }
 
-  // No Insurance filter — show uninsured OR sliding scale family clinics
   const filtered = allClinics.filter(c => {
     if (catParam === "uninsured") {
       return c.type === "uninsured" || (c.type === "family" && c.sliding);
     }
-    return true; // API already filtered by category
+    return true;
   });
 
   const px = isMobile ? "18px" : "48px";
@@ -638,12 +592,10 @@ function ResultsInner() {
       </div>
 
       {/* FILTER ROW */}
-      {/* Each button navigates to a new URL — triggers fresh API fetch for that category */}
       <div style={{ background: C.iWhite, borderBottom: "1px solid " + C.border,
         padding: isMobile ? "10px 18px" : "12px 48px",
         display: "flex", alignItems: "center", gap: 8, overflowX: "auto" }}>
 
-        {/* All Care */}
         <button onClick={() => navToCategory("")}
           style={{ padding: isMobile ? "8px 12px" : "9px 18px",
             borderRadius: 4, fontSize: isMobile ? 13 : 14,
@@ -655,7 +607,6 @@ function ResultsInner() {
           {lang === "en" ? "All Care" : "Todo"}
         </button>
 
-        {/* Category buttons */}
         {CATEGORIES.map(cat => {
           const isActive = catParam === cat.id;
           const isVet    = cat.id === "veteran";
@@ -673,21 +624,6 @@ function ResultsInner() {
             </button>
           );
         })}
-
-        {/* Veterans Only toggle 
-        <button onClick={() => navToCategory("veteran")}
-          style={{ display: "flex", alignItems: "center", gap: 6,
-            padding: isMobile ? "8px 12px" : "9px 18px",
-            borderRadius: 4, fontSize: isMobile ? 13 : 14,
-            fontFamily: F.body, fontWeight: 600,
-            border: "1.5px solid " + (catParam === "veteran" ? C.gold : C.border),
-            background: catParam === "veteran" ? C.goldL : C.iWhite,
-            color: catParam === "veteran" ? "#7A5E00" : C.t3,
-            cursor: "pointer", whiteSpace: "nowrap", minHeight: 44 }}>
-          <IconShield size={15} />
-          {lang === "en" ? "Veterans" : "Veteranos"}
-        </button>
-        */}
 
         {/* List / Map toggle */}
         <div style={{ marginLeft: "auto", display: "flex",
@@ -750,10 +686,10 @@ function ResultsInner() {
             gap: isMobile ? 16 : 20 }}>
             {filtered.map(clinic => (
               <ClinicCard key={clinic.id} clinic={clinic} isMobile={isMobile} lang={lang}
-                onClick={() => { 
+                onClick={() => {
                   sessionStorage.setItem("rrClinic", JSON.stringify(clinic));
                   router.push(`/clinic/${clinic.id}?lang=${lang}`);
-                }}/>
+                }} />
             ))}
           </div>
           {filtered.length === 0 && (
@@ -788,10 +724,10 @@ function ResultsInner() {
               <MiniCard key={clinic.id} clinic={clinic} isMobile={isMobile} lang={lang}
                 selected={selectedClinic?.id === clinic.id}
                 onClick={() => {
-                            setSelectedClinic(clinic);
-                            sessionStorage.setItem("rrClinic", JSON.stringify(clinic));
-                            router.push(`/clinic/${clinic.id}?lang=${lang}`);
-                          }} />
+                  setSelectedClinic(clinic);
+                  sessionStorage.setItem("rrClinic", JSON.stringify(clinic));
+                  router.push(`/clinic/${clinic.id}?lang=${lang}`);
+                }} />
             ))}
           </div>
           <div style={{ flex: 1, order: isMobile ? 1 : 2, minHeight: isMobile ? 340 : "auto" }}>

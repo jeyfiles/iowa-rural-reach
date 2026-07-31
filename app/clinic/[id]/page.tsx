@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { COLORS as C, FONTS as F } from "../../lib/constants";
+import { translateService, translateInsurance } from "../../lib/translations";
 // import { MOCK_CLINICS } from "../../lib/mockClinics"; // kept for reference
 import { Clinic } from "../../lib/types";
 
@@ -73,14 +74,15 @@ function IconCheck() {
   );
 }
 
-function getTypeProps(type: Clinic["type"]) {
+// ── getTypeProps with lang support ───────────────────────────────
+function getTypeProps(type: Clinic["type"], lang: "en"|"es" = "en") {
   const map = {
-    family:    { color: C.iBlue,   bg: C.blueL,  label: "Family Care"   },
-    mental:    { color: "#166534", bg: "#DCFCE7", label: "Mental Health" },
-    dental:    { color: "#6B21A8", bg: "#F3E8FF", label: "Dental"        },
-    veteran:   { color: "#7A5E00", bg: C.goldL,   label: "Veterans Care" },
-    er:        { color: C.iRed,    bg: C.redL,    label: "Emergency"     },
-    uninsured: { color: "#166534", bg: "#DCFCE7", label: "No Insurance"  },
+    family:    { color: C.iBlue,   bg: C.blueL,  label: lang === "en" ? "Family Care"   : "Atencion Familiar" },
+    mental:    { color: "#166534", bg: "#DCFCE7", label: lang === "en" ? "Mental Health" : "Salud Mental"      },
+    dental:    { color: "#6B21A8", bg: "#F3E8FF", label: lang === "en" ? "Dental"        : "Dental"            },
+    veteran:   { color: "#7A5E00", bg: C.goldL,   label: lang === "en" ? "Veterans Care" : "Veteranos"         },
+    er:        { color: C.iRed,    bg: C.redL,    label: lang === "en" ? "Emergency"     : "Emergencia"        },
+    uninsured: { color: "#166534", bg: "#DCFCE7", label: lang === "en" ? "No Insurance"  : "Sin Seguro"        },
   };
   return map[type];
 }
@@ -134,8 +136,6 @@ function ClinicDetailInner() {
   const [lang, setLang]           = useState<"en"|"es">(langParam);
   const [isMobile, setIsMobile]   = useState(false);
   const [activeTab, setActiveTab] = useState<"details"|"insurance"|"prep">("details");
-
-  // ── Clinic data — loaded from sessionStorage (real API) or mock fallback ──
   const [clinic, setClinic]       = useState<Clinic | undefined>(undefined);
   const [clinicReady, setClinicReady] = useState(false);
 
@@ -151,10 +151,7 @@ function ClinicDetailInner() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // Load clinic from sessionStorage (set by results page onClick)
-  // Falls back to MOCK_CLINICS for backwards compatibility
   useEffect(() => {
-    // Try sessionStorage first — real API clinics stored here when card is clicked
     const stored = sessionStorage.getItem("rrClinic");
     if (stored) {
       try {
@@ -164,19 +161,14 @@ function ClinicDetailInner() {
           setClinicReady(true);
           return;
         }
-      } catch {
-        // Invalid JSON in sessionStorage — fall through to mock
-      }
+      } catch { /* fall through */ }
     }
-    // Fallback: try MOCK_CLINICS for any hardcoded test data
-    // import { MOCK_CLINICS } from "../../lib/mockClinics";
     import("../../lib/mockClinics").then(({ MOCK_CLINICS }) => {
       setClinic(MOCK_CLINICS.find(c => c.id === id));
       setClinicReady(true);
     });
   }, [id]);
 
-  // Loading state while clinic data is being retrieved
   if (!clinicReady) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center",
@@ -192,7 +184,6 @@ function ClinicDetailInner() {
     );
   }
 
-  // Not found state
   if (!clinic) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center",
@@ -212,7 +203,8 @@ function ClinicDetailInner() {
     );
   }
 
-  const tp   = getTypeProps(clinic.type);
+  // Pass lang to getTypeProps so badge translates correctly
+  const tp   = getTypeProps(clinic.type, lang);
   const prep = getVisitPrep(clinic, lang);
   const px   = isMobile ? "18px" : "48px";
 
@@ -400,11 +392,11 @@ function ClinicDetailInner() {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {clinic.services.map(svc => (
-                  <span key={svc} style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                  <span key={translateService(svc, lang)} style={{ display: "inline-flex", alignItems: "center", gap: 6,
                     fontFamily: F.body, fontSize: isMobile ? 13 : 14,
                     color: C.iBlue, background: C.blueL,
                     padding: "6px 14px", borderRadius: 4, fontWeight: 500 }}>
-                    <span style={{ color: C.iBlue }}><IconCheck /></span>{svc}
+                    <span style={{ color: C.iBlue }}><IconCheck /></span>{translateService(svc, lang)} 
                   </span>
                 ))}
               </div>
@@ -442,11 +434,11 @@ function ClinicDetailInner() {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {clinic.insurance.map(ins => (
-                  <span key={ins} style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                  <span key={translateInsurance(ins, lang)} style={{ display: "inline-flex", alignItems: "center", gap: 6,
                     fontFamily: F.body, fontSize: isMobile ? 14 : 15,
                     color: "#166534", background: "#DCFCE7",
                     padding: "8px 16px", borderRadius: 4, fontWeight: 500 }}>
-                    <IconCheck />{ins}
+                    <IconCheck />{translateInsurance(ins, lang)}
                   </span>
                 ))}
               </div>
