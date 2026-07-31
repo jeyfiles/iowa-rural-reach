@@ -20,7 +20,7 @@ export const COLORS = {
   borderM:    "#B8C4E0",
 
   // Functional colors
-  gold:       "#FFCD00",   // Iowa Hawkeyes gold — veterans accent
+  gold:       "#FFCD00",   // Iowa Hawkeyes gold color - veterans accent
   goldL:      "#FFF8D6",
   redL:       "#FDECEA",   // light red for 911 banner
   blueL:      "#E6EBF8",   // light blue for 988 banner
@@ -34,10 +34,10 @@ export const FONTS = {
 };
 
 export const CATEGORIES = [
-  { id: "family",   label: "Family Care",   labelEs: "Atención Familiar" },
-  { id: "mental",   label: "Mental Health", labelEs: "Salud Mental"      },
-  { id: "dental",   label: "Dental",        labelEs: "Dental"            },
-  { id: "veteran",  label: "Veterans Care", labelEs: "Veteranos"         },
-  { id: "er",       label: "Emergency",     labelEs: "Emergencia"        },
-  { id: "uninsured",label: "No Insurance",  labelEs: "Sin Seguro"        },
+  { id: "family",    label: "Family Care",   labelEs: "Atención Familiar" },
+  { id: "mental",    label: "Mental Health", labelEs: "Salud Mental"      },
+  { id: "veteran",   label: "Veterans Care", labelEs: "Veteranos"         },
+  { id: "er",        label: "Emergency",     labelEs: "Emergencia"        },
+  { id: "dental",    label: "Dental",        labelEs: "Dental"            },
+  { id: "uninsured", label: "No Insurance",  labelEs: "Sin Seguro"        },
 ];

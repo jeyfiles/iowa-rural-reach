@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { COLORS as C, FONTS as F } from "../../lib/constants";
-import { MOCK_CLINICS } from "../../lib/mockClinics";
+// import { MOCK_CLINICS } from "../../lib/mockClinics"; // kept for reference
 import { Clinic } from "../../lib/types";
 
 function IconArrowLeft() {
@@ -131,15 +131,18 @@ function ClinicDetailInner() {
   const id           = params.id as string;
   const langParam    = (searchParams.get("lang") ?? "en") as "en" | "es";
 
-  const [lang, setLang] = useState<"en"|"es">(langParam);
-  const [isMobile, setIsMobile] = useState(false);
+  const [lang, setLang]           = useState<"en"|"es">(langParam);
+  const [isMobile, setIsMobile]   = useState(false);
+  const [activeTab, setActiveTab] = useState<"details"|"insurance"|"prep">("details");
+
+  // ── Clinic data — loaded from sessionStorage (real API) or mock fallback ──
+  const [clinic, setClinic]       = useState<Clinic | undefined>(undefined);
+  const [clinicReady, setClinicReady] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("rrLang") as "en"|"es" | null;
     if (saved) setLang(saved);
   }, []);
-
-  const [activeTab, setActiveTab] = useState<"details"|"insurance"|"prep">("details");
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -148,8 +151,48 @@ function ClinicDetailInner() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  const clinic = MOCK_CLINICS.find(c => c.id === id);
+  // Load clinic from sessionStorage (set by results page onClick)
+  // Falls back to MOCK_CLINICS for backwards compatibility
+  useEffect(() => {
+    // Try sessionStorage first — real API clinics stored here when card is clicked
+    const stored = sessionStorage.getItem("rrClinic");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as Clinic;
+        if (parsed.id === id) {
+          setClinic(parsed);
+          setClinicReady(true);
+          return;
+        }
+      } catch {
+        // Invalid JSON in sessionStorage — fall through to mock
+      }
+    }
+    // Fallback: try MOCK_CLINICS for any hardcoded test data
+    // import { MOCK_CLINICS } from "../../lib/mockClinics";
+    import("../../lib/mockClinics").then(({ MOCK_CLINICS }) => {
+      setClinic(MOCK_CLINICS.find(c => c.id === id));
+      setClinicReady(true);
+    });
+  }, [id]);
 
+  // Loading state while clinic data is being retrieved
+  if (!clinicReady) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center",
+        justifyContent: "center", fontFamily: F.body, color: C.t3 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 16, height: 16, borderRadius: "50%",
+            border: "2px solid " + C.iBlue, borderTopColor: "transparent",
+            animation: "spin 0.8s linear infinite" }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  // Not found state
   if (!clinic) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center",

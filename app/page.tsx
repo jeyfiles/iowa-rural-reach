@@ -151,7 +151,7 @@ export default function Home() {
   );
 
   const t = {
-    appSub:      lang === "en" ? "Iowa AI Health Care Finder" : "Buscador de Atencion Medica con IA",
+    appSub:      lang === "en" ? "Iowa AI Healthcare Finder" : "Buscador de Atencion Medica con IA",
     heading:     lang === "en" ? "What kind of care do you need?" : "Que tipo de atencion necesita?",
     sub:         lang === "en" ? "Describe your situation and we will find the right care near you." : "Describa su situacion y encontraremos opciones cerca de usted.",
     placeholder: lang === "en" ? "e.g. I need a doctor who takes Medicaid in Muscatine" : "ej. Necesito un medico que acepte Medicaid",
@@ -160,9 +160,9 @@ export default function Home() {
     aiNav:       lang === "en" ? "Ask AI Navigator" : "Preguntar al IA",
     orPick:      lang === "en" ? "Or choose a category" : "O elija una categoria",
     howTitle:    lang === "en" ? "How Iowa Rural Reach helps" : "Como ayuda Iowa Rural Reach",
-    card1Title:  lang === "en" ? "Find the right match"   : "Encuentre la opcion correcta",
+    card1Title:  lang === "en" ? "Find the right healthcare near you"   : "Encuentra la atención médica adecuada cerca de ti",
     card1Body:   lang === "en" ? "Filter by insurance, cost, language, and distance - not just what is nearest." : "Filtre por seguro, costo, idioma y distancia.",
-    card2Title:  lang === "en" ? "Veterans care included" : "Atencion para veteranos",
+    card2Title:  lang === "en" ? "Veteran & VA Care Finder" : "Buscador de Atención para Veteranos y VA",
     card2Body:   lang === "en" ? "Dedicated layer for VA facilities, Vet Centers, and benefits offices near you." : "Capa dedicada para instalaciones VA y oficinas de beneficios.",
     card3Title:  lang === "en" ? "AI Care Navigator"      : "Navegador de Atencion IA",
     card3Body:   lang === "en" ? "Speak or type your situation. Get personalized care recommendations instantly." : "Hable o escriba su situacion y reciba recomendaciones personalizadas.",
@@ -355,8 +355,8 @@ export default function Home() {
                   <div style={{ fontFamily: F.body, fontSize: isMobile ? 13 : 14,
                     color: "#8B0000", marginTop: 2, lineHeight: 1.4 }}>
                     {lang === "en"
-                      ? "Chest pain, accident, immediate danger - Call 911"
-                      : "Dolor de pecho, accidente, peligro inmediato - Llame al 911"}
+                      ? "Chest pain, accident, immediate danger? Call 911"
+                      : "Dolor de pecho, accidente, peligro inmediato? Llame al 911"}
                   </div>
                 </div>
               </div>
@@ -380,8 +380,8 @@ export default function Home() {
                   <div style={{ fontFamily: F.body, fontSize: isMobile ? 13 : 14,
                     color: C.t2, marginTop: 2, lineHeight: 1.4 }}>
                     {lang === "en"
-                      ? "Suicidal thoughts or emotional distress - Call or text 988"
-                      : "Pensamientos suicidas o angustia - Llame o escriba al 988"}
+                      ? "Suicidal thoughts or emotional distress? Call or text 988"
+                      : "Pensamientos suicidas o angustia? Llame o escriba al 988"}
                   </div>
                 </div>
               </div>
