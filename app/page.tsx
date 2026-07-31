@@ -151,7 +151,7 @@ export default function Home() {
   );
 
   const t = {
-    appSub:      lang === "en" ? "Iowa AI Healthcare Finder" : "Buscador de Atencion Medica con IA",
+    appSub:      lang === "en" ? "AI Healthcare Finder" : "Buscador de Atencion Medica con IA",
     heading:     lang === "en" ? "What kind of care do you need?" : "Que tipo de atencion necesita?",
     sub:         lang === "en" ? "Describe your situation and we will find the right care near you." : "Describa su situacion y encontraremos opciones cerca de usted.",
     placeholder: lang === "en" ? "e.g. I need a doctor who takes Medicaid in Muscatine" : "ej. Necesito un medico que acepte Medicaid",

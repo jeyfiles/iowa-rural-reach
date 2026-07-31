@@ -135,7 +135,7 @@ function IconMap({ size = 18 }: { size?: number }) {
   );
 }
 
-// ── getTypeProps with lang support ───────────────────────────────
+// ── getTypeProps now accepts lang for translated labels ──────────
 function getTypeProps(type: Clinic["type"], lang: "en"|"es" = "en") {
   const map = {
     family:    { icon: <IconStethoscope />, color: C.iBlue,   bg: C.blueL,   label: lang === "en" ? "Family Care"   : "Atencion Familiar", pinColor: "#0A1F62" },
@@ -181,63 +181,6 @@ function LoadingSkeleton({ isMobile }: { isMobile: boolean }) {
   );
 }
 
-// ── Lite Mode loading — plain text, no animation ─────────────────
-function LiteLoadingSkeleton() {
-  return (
-    <div style={{ padding: "16px 18px", fontFamily: F.body,
-      fontSize: 15, color: C.t2 }}>
-      Finding care near you...
-    </div>
-  );
-}
-
-// ── Lite Mode clinic card — text only, no images or animations ───
-// Designed for slow 2G/3G connections — minimal CSS, fast render
-function LiteClinicCard({ clinic, lang, onClick }: {
-  clinic: Clinic; lang: "en"|"es"; onClick: () => void;
-}) {
-  const tp = getTypeProps(clinic.type, lang);
-  return (
-    <div onClick={onClick}
-      style={{ background: C.iWhite, border: "1px solid " + C.border,
-        borderLeft: "4px solid " + tp.color,
-        padding: "14px 16px", marginBottom: 10, cursor: "pointer" }}>
-      <div style={{ fontFamily: F.heading, fontSize: 16, fontWeight: 700,
-        color: C.iBlue, marginBottom: 4 }}>
-        {clinic.name}
-      </div>
-      <div style={{ fontFamily: F.body, fontSize: 13, color: C.t3, marginBottom: 6 }}>
-        {tp.label} · {clinic.distance} {lang === "en" ? "away" : "de distancia"}
-        {clinic.open ? (lang === "en" ? " · Open" : " · Abierto") : (lang === "en" ? " · Closed" : " · Cerrado")}
-        {clinic.sliding ? (lang === "en" ? " · Sliding Scale" : " · Escala Movil") : ""}
-      </div>
-      <div style={{ fontFamily: F.body, fontSize: 13, color: C.t2, marginBottom: 10 }}>
-        {clinic.address}
-      </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <a href={"tel:" + clinic.phone} onClick={e => e.stopPropagation()}
-          style={{ textDecoration: "none", flex: 1 }}>
-          <button style={{ width: "100%", padding: "10px", border: "none",
-            background: C.iBlue, color: C.iWhite, fontFamily: F.body,
-            fontSize: 14, fontWeight: 600, cursor: "pointer", minHeight: 44 }}>
-            {lang === "en" ? "Call" : "Llamar"} {clinic.phone}
-          </button>
-        </a>
-        <a href={"https://maps.google.com/?q=" + encodeURIComponent(clinic.address)}
-          target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-          style={{ textDecoration: "none", flex: 1 }}>
-          <button style={{ width: "100%", padding: "10px", background: C.iWhite,
-            color: C.iBlue, border: "1.5px solid " + C.iBlue,
-            fontFamily: F.body, fontSize: 14, fontWeight: 600,
-            cursor: "pointer", minHeight: 44 }}>
-            {lang === "en" ? "Directions" : "Como llegar"}
-          </button>
-        </a>
-      </div>
-    </div>
-  );
-}
-
 // ── Google Map ───────────────────────────────────────────────────
 function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId, centerLat, centerLng }: {
   clinics: Clinic[]; isMobile: boolean;
@@ -257,7 +200,7 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId, centerLat, c
       markersRef.current.forEach(m => m.setMap(null));
       markersRef.current = [];
       clinics.forEach(clinic => {
-        const tp = getTypeProps(clinic.type);
+        const tp = getTypeProps(clinic.type); // map always uses English labels
         const marker = new window.google.maps.Marker({
           position: { lat: clinic.lat, lng: clinic.lng }, map, title: clinic.name,
           icon: {
@@ -452,7 +395,7 @@ function ClinicCard({ clinic, isMobile, lang, onClick }: {
             <span key={ins} style={{ fontFamily: F.body, fontSize: 12,
               color: C.iBlue, background: C.iWhite,
               border: "1px solid rgba(10,31,98,0.35)", padding: "2px 8px", borderRadius: 4 }}>
-              {translateInsurance(ins, lang)}
+              {ins}
             </span>
           ))}
         </div>
@@ -475,7 +418,7 @@ function ClinicCard({ clinic, isMobile, lang, onClick }: {
               background: C.iWhite, color: C.iBlue,
               border: "1.5px solid " + C.iBlue, fontFamily: F.body,
               fontSize: isMobile ? 14 : 15, fontWeight: 500, cursor: "pointer", minHeight: 48 }}>
-            <IconMapPin /> {lang === "en" ? "Directions" : "Como llegar"}
+              <IconMapPin /> {lang === "en" ? "Directions" : "Como llegar"}
             </button>
           </a>
         </div>
@@ -498,7 +441,6 @@ function ResultsInner() {
   const [viewMode, setViewMode]       = useState<"list"|"map">("list");
   const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
 
-  // ── Real API state ─────────────────────────────────────────────
   const [allClinics, setAllClinics]       = useState<Clinic[]>([]);
   const [loading, setLoading]             = useState(true);
   const [apiError, setApiError]           = useState(false);
@@ -506,18 +448,11 @@ function ResultsInner() {
   const [centerLng, setCenterLng]         = useState(-91.0432);
   const [locationLabel, setLocationLabel] = useState("Muscatine, IA");
 
-  // ── Lite Mode state ───────────────────────────────────────────
-  // Auto-detects slow connections; user can also toggle manually
-  // liteMode=true → no map, no animations, text-only cards
-  const [liteMode, setLiteMode] = useState(false);
-
-  // Load saved language
   useEffect(() => {
     const saved = localStorage.getItem("rrLang") as "en"|"es" | null;
     if (saved) setLang(saved);
   }, []);
 
-  // Mobile detection
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
@@ -525,29 +460,6 @@ function ResultsInner() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // ── Auto-detect slow connection and enable lite mode ──────────
-  useEffect(() => {
-    const conn = (navigator as any).connection;
-    if (conn) {
-      const slow = ["slow-2g", "2g"].includes(conn.effectiveType);
-      if (slow) setLiteMode(true);
-      // Also listen for connection changes
-      conn.addEventListener("change", () => {
-        const nowSlow = ["slow-2g", "2g"].includes(conn.effectiveType);
-        setLiteMode(nowSlow);
-      });
-    }
-    // Also check saved preference
-    const saved = localStorage.getItem("rrLiteMode");
-    if (saved === "true") setLiteMode(true);
-  }, []);
-
-  // Persist lite mode preference
-  useEffect(() => {
-    localStorage.setItem("rrLiteMode", liteMode ? "true" : "false");
-  }, [liteMode]);
-
-  // ── Fetch real clinics ─────────────────────────────────────────
   useEffect(() => {
     async function loadClinics() {
       setLoading(true);
@@ -617,137 +529,6 @@ function ResultsInner() {
 
   const px = isMobile ? "18px" : "48px";
 
-  // ── Lite Mode render ──────────────────────────────────────────
-  // Completely separate, minimal render path — no map, no animations
-  if (liteMode) {
-    return (
-      <main style={{ minHeight: "100vh", background: "#fff", fontFamily: F.body }}>
-
-        {/* LITE NAV */}
-        <nav style={{ background: C.iBlue, padding: "0 18px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          height: 56, borderBottom: "3px solid #1A3A7A" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button onClick={() => router.push(`/?lang=${lang}`)}
-              style={{ display: "flex", alignItems: "center", gap: 6,
-                background: "transparent", border: "none", color: "#A8B8D8",
-                cursor: "pointer", fontFamily: F.body, fontSize: 14, minHeight: 44 }}>
-              <IconArrowLeft />
-            </button>
-            <span style={{ fontFamily: F.heading, fontSize: 18,
-              fontWeight: 700, color: C.iWhite }}>
-              Iowa Rural Reach
-            </span>
-          </div>
-          <button onClick={() => setLiteMode(false)}
-            style={{ background: "transparent", border: "1px solid #3A5A9A",
-              color: "#A8B8D8", padding: "5px 10px", borderRadius: 4,
-              fontFamily: F.body, fontSize: 12, cursor: "pointer" }}>
-            {lang === "en" ? "Full View" : "Vista Completa"}
-          </button>
-        </nav>
-
-        {/* LITE MODE BANNER */}
-        <div style={{ background: C.goldL, borderBottom: "1px solid " + C.gold,
-          padding: "8px 18px", display: "flex", alignItems: "center",
-          justifyContent: "space-between", gap: 12 }}>
-          <span style={{ fontFamily: F.body, fontSize: 13, color: "#7A5E00" }}>
-            {lang === "en"
-              ? "Lite Mode — optimized for slow connections"
-              : "Modo Lite — optimizado para conexiones lentas"}
-          </span>
-        </div>
-
-        {/* LITE FILTER ROW */}
-        <div style={{ background: "#F4F6FB", borderBottom: "1px solid " + C.border,
-          padding: "10px 18px", display: "flex", gap: 8, overflowX: "auto" }}>
-          <button onClick={() => navToCategory("")}
-            style={{ padding: "7px 12px", border: "1px solid " + (!catParam ? C.iBlue : C.border),
-              background: !catParam ? C.blueL : C.iWhite,
-              color: !catParam ? C.iBlue : C.t3,
-              fontFamily: F.body, fontSize: 13, cursor: "pointer",
-              whiteSpace: "nowrap", minHeight: 40 }}>
-            {lang === "en" ? "All" : "Todo"}
-          </button>
-          {CATEGORIES.map(cat => (
-            <button key={cat.id} onClick={() => navToCategory(cat.id)}
-              style={{ padding: "7px 12px",
-                border: "1px solid " + (catParam === cat.id ? C.iBlue : C.border),
-                background: catParam === cat.id ? C.blueL : C.iWhite,
-                color: catParam === cat.id ? C.iBlue : C.t3,
-                fontFamily: F.body, fontSize: 13, cursor: "pointer",
-                whiteSpace: "nowrap", minHeight: 40 }}>
-              {lang === "en" ? cat.label : cat.labelEs}
-            </button>
-          ))}
-        </div>
-
-        {/* LITE CONTENT */}
-        <div style={{ padding: "12px 18px" }}>
-          {loading && <LiteLoadingSkeleton />}
-
-          {apiError && !loading && (
-            <div style={{ fontFamily: F.body, fontSize: 15, color: C.t3, padding: "20px 0" }}>
-              {lang === "en" ? "Could not load. " : "No se pudo cargar. "}
-              <button onClick={() => window.location.reload()}
-                style={{ background: "none", border: "none", color: C.iBlue,
-                  fontFamily: F.body, fontSize: 15, cursor: "pointer",
-                  textDecoration: "underline", padding: 0 }}>
-                {lang === "en" ? "Retry" : "Reintentar"}
-              </button>
-            </div>
-          )}
-
-          {!loading && !apiError && (
-            <>
-              <div style={{ fontFamily: F.body, fontSize: 13, color: C.t3, marginBottom: 12 }}>
-                {filtered.length} {lang === "en" ? "results near" : "resultados cerca de"} {locationLabel}
-              </div>
-              {filtered.map(clinic => (
-                <LiteClinicCard key={clinic.id} clinic={clinic} lang={lang}
-                  onClick={() => {
-                    sessionStorage.setItem("rrClinic", JSON.stringify(clinic));
-                    router.push(`/clinic/${clinic.id}?lang=${lang}`);
-                  }} />
-              ))}
-              {filtered.length === 0 && (
-                <div style={{ fontFamily: F.body, fontSize: 15, color: C.t3, padding: "20px 0" }}>
-                  {lang === "en" ? "No results found." : "Sin resultados."}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* LITE EMERGENCY FOOTER */}
-        <div style={{ borderTop: "1px solid " + C.border, padding: "12px 18px",
-          display: "flex", flexDirection: "column", gap: 8, background: C.iWhite }}>
-          <a href="tel:911" style={{ textDecoration: "none" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-              background: C.redL, border: "1px solid " + C.iRed }}>
-              <span style={{ fontFamily: F.heading, fontSize: 13,
-                fontWeight: 700, color: C.iRed }}>911</span>
-              <span style={{ fontFamily: F.body, fontSize: 14, color: C.iRed, fontWeight: 500 }}>
-                {lang === "en" ? "Physical Emergency — Call 911" : "Emergencia Fisica — Llame al 911"}
-              </span>
-            </div>
-          </a>
-          <a href="tel:988" style={{ textDecoration: "none" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-              background: C.blueL, border: "1px solid " + C.iBlue }}>
-              <span style={{ fontFamily: F.heading, fontSize: 13,
-                fontWeight: 700, color: C.iBlue }}>988</span>
-              <span style={{ fontFamily: F.body, fontSize: 14, color: C.iBlue, fontWeight: 500 }}>
-                {lang === "en" ? "Mental Health Crisis — Call 988" : "Crisis Mental — Llame al 988"}
-              </span>
-            </div>
-          </a>
-        </div>
-      </main>
-    );
-  }
-
-  // ── Full Mode render (unchanged) ──────────────────────────────
   return (
     <main style={{ minHeight: "100vh", background: "#F4F6FB", fontFamily: F.body }}>
 
@@ -771,20 +552,10 @@ function ResultsInner() {
             Iowa Rural Reach
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Lite Mode toggle — visible in full mode */}
-          <button onClick={() => setLiteMode(true)}
-            style={{ background: "transparent", border: "1px solid #3A5A9A",
-              color: "#A8B8D8", padding: "5px 10px", borderRadius: 4,
-              fontFamily: F.body, fontSize: 12, cursor: "pointer",
-              display: isMobile ? "none" : "block" }}>
-            {lang === "en" ? "Lite Mode" : "Modo Lite"}
-          </button>
-          <div style={{ fontSize: 13, fontFamily: F.body,
-            padding: "6px 12px", borderRadius: 4,
-            border: "1px solid #3A5A9A", color: "#A8B8D8" }}>
-            {lang === "en" ? "EN" : "ES"}
-          </div>
+        <div style={{ fontSize: 13, fontFamily: F.body,
+          padding: "6px 12px", borderRadius: 4,
+          border: "1px solid #3A5A9A", color: "#A8B8D8" }}>
+          {lang === "en" ? "EN" : "ES"}
         </div>
       </nav>
 
