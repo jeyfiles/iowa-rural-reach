@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalizeLocation, isVagueGeoResult } from "../../lib/locationUtils";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -14,10 +15,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Add Iowa to the query if not already there to bias results
-    const query = address.toLowerCase().includes("iowa")
-      ? address
-      : `${address}, Iowa`;
+    // Normalize: resolve aliases ("Quad Cities" → "Davenport, Iowa"),
+    // and append Iowa if not already present.
+    const query = normalizeLocation(address);
 
     const res = await fetch(
       `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`
@@ -26,16 +26,31 @@ export async function GET(req: NextRequest) {
 
     if (data.status !== "OK" || !data.results?.[0]) {
       // Fallback to Muscatine, Iowa center if geocoding fails
-      return NextResponse.json({ lat: 41.4245, lng: -91.0432, fallback: true });
+      return NextResponse.json({
+        lat: 41.4245, lng: -91.0432,
+        fallback: true, vague: true,
+      });
     }
 
     const { lat, lng } = data.results[0].geometry.location;
     const formattedAddress = data.results[0].formatted_address;
 
-    return NextResponse.json({ lat, lng, formattedAddress });
+    // Detect vague results (e.g. "Iowa, USA") and flag them
+    const vague = isVagueGeoResult(formattedAddress);
+    if (vague) {
+      return NextResponse.json({
+        lat: 41.4245, lng: -91.0432,
+        fallback: true, vague: true,
+        formattedAddress: "Iowa",
+      });
+    }
+
+    return NextResponse.json({ lat, lng, formattedAddress, vague: false });
   } catch (err) {
     console.error("Geocode error:", err);
-    // Fallback to Muscatine center
-    return NextResponse.json({ lat: 41.4245, lng: -91.0432, fallback: true });
+    return NextResponse.json({
+      lat: 41.4245, lng: -91.0432,
+      fallback: true, vague: true,
+    });
   }
 }

@@ -10,6 +10,8 @@ interface Message {
   role: "user" | "ai";
   text: string;
   loading?: boolean;
+  // context extracted from AI response for Show Results button
+  resultsUrl?: string;
 }
 
 function IconArrowLeft() {
@@ -41,33 +43,74 @@ function IconBot() {
   );
 }
 
-function IconSearch() {
+function IconMap() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8"/>
-      <path d="m21 21-4.35-4.35"/>
+      <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+      <line x1="9" y1="3" x2="9" y2="18"/>
+      <line x1="15" y1="6" x2="15" y2="21"/>
     </svg>
   );
 }
 
+// ── Suggestions — Iowa-wide, not Muscatine-specific ──────────────
 const SUGGESTIONS_EN = [
-  "I need a doctor who takes Medicaid near Muscatine",
-  "I am a veteran with PTSD and cannot drive far",
+  "I need a doctor who takes Medicaid near Iowa City",
+  "I am a veteran with PTSD near Burlington",
   "My child needs dental care and we have no insurance",
-  "I am feeling very depressed and need help",
+  "I am feeling very depressed and need help near Cedar Rapids",
   "Where can I find free or low cost care near me?",
   "I need emergency care right now",
 ];
 
 const SUGGESTIONS_ES = [
-  "Necesito un medico que acepte Medicaid cerca de Muscatine",
-  "Soy veterano con PTSD y no puedo manejar lejos",
+  "Necesito un medico que acepte Medicaid cerca de Iowa City",
+  "Soy veterano con PTSD cerca de Burlington",
   "Mi hijo necesita atencion dental y no tenemos seguro",
-  "Me siento muy deprimido y necesito ayuda",
+  "Me siento muy deprimido y necesito ayuda cerca de Cedar Rapids",
   "Donde puedo encontrar atencion gratuita cerca?",
   "Necesito atencion de emergencia ahora",
 ];
+
+// ── Extract category and location from AI response ───────────────
+// Used to build the context-aware Show Results URL
+function buildResultsUrl(userMessage: string, lang: "en"|"es"): string {
+  const msg = userMessage.toLowerCase();
+
+  // Detect category from user message
+  let cat = "";
+  if (/veteran|va\b|military|vets/i.test(msg))                           cat = "veteran";
+  else if (/mental|counsel|depress|anxiety|ptsd|substance|alcohol/i.test(msg)) cat = "mental";
+  else if (/dental|dentist|tooth|teeth/i.test(msg))                      cat = "dental";
+  else if (/emergency|er\b|urgent|hospital|chest pain/i.test(msg))       cat = "er";
+  else if (/uninsured|no insurance|sliding|free clinic|afford/i.test(msg)) cat = "uninsured";
+  else if (/doctor|primary|family|medicaid|checkup/i.test(msg))           cat = "family";
+
+  // Extract location from user message
+  const patterns = [
+    /(?:near|in|around|close to|from)\s+([A-Za-z][a-zA-Z\s]+?)(?:\s*[,.]|$)/i,
+    /([A-Za-z][a-zA-Z\s]+),?\s*Iowa/i,
+  ];
+  const falsePositives = ["i", "a", "the", "my", "me", "we", "us", "help", "care", "need", "want", "iowa"];
+  let location = "";
+  for (const p of patterns) {
+    const m = userMessage.match(p);
+    if (m?.[1]) {
+      const loc = m[1].trim();
+      if (!falsePositives.includes(loc.toLowerCase())) {
+        location = loc;
+        break;
+      }
+    }
+  }
+
+  // Build URL
+  const params = new URLSearchParams({ lang });
+  if (cat) params.set("cat", cat);
+  if (location) params.set("q", location);
+  return `/results?${params.toString()}`;
+}
 
 function TypingDots() {
   return (
@@ -85,8 +128,11 @@ function NavigatorInner() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const langParam    = (searchParams.get("lang") ?? "en") as "en" | "es";
+  // q param — passed from home screen search bar
+  const initialQuery = searchParams.get("q") ?? "";
   const bottomRef    = useRef<HTMLDivElement>(null);
   const inputRef     = useRef<HTMLTextAreaElement>(null);
+  const didAutoSend  = useRef(false);
 
   const [lang, setLang]         = useState<"en"|"es">(langParam);
   const [isMobile, setIsMobile] = useState(false);
@@ -99,13 +145,11 @@ function NavigatorInner() {
       : "Hola! Soy el Navegador de Atencion IA de Iowa Rural Reach. Cuenteme su situacion y le ayudare a encontrar la atencion adecuada cerca de usted.",
   }]);
 
-  // Load saved language
   useEffect(() => {
     const saved = localStorage.getItem("rrLang") as "en"|"es" | null;
     if (saved) setLang(saved);
   }, []);
 
-  // Mobile detection
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
@@ -113,13 +157,26 @@ function NavigatorInner() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // Auto scroll to bottom
+  // ── Auto-submit query from home screen search bar ─────────────
+  // If user typed in the home screen search bar and pressed Find Care,
+  // we receive the query via ?q= param and auto-send it
+  useEffect(() => {
+    if (initialQuery && !didAutoSend.current) {
+      didAutoSend.current = true;
+      sendMessage(initialQuery);
+    }
+  }, [initialQuery]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   async function sendMessage(text: string) {
     if (!text.trim() || loading) return;
+
+    // Build the results URL from the user message for the Show Results button
+    const resultsUrl = buildResultsUrl(text, lang);
+
     const userMsg: Message    = { role: "user", text: text.trim() };
     const loadingMsg: Message = { role: "ai", text: "", loading: true };
     setMessages(prev => [...prev, userMsg, loadingMsg]);
@@ -138,7 +195,13 @@ function NavigatorInner() {
       const aiText = data.text ?? (lang === "en"
         ? "I am sorry, something went wrong. Please try again."
         : "Lo siento, algo salio mal. Por favor intente de nuevo.");
-      setMessages(prev => [...prev.filter(m => !m.loading), { role: "ai", text: aiText }]);
+
+      // Attach resultsUrl to the AI message so Show Results button appears
+      setMessages(prev => [...prev.filter(m => !m.loading), {
+        role: "ai",
+        text: aiText,
+        resultsUrl,
+      }]);
     } catch {
       setMessages(prev => [...prev.filter(m => !m.loading), {
         role: "ai",
@@ -151,7 +214,6 @@ function NavigatorInner() {
     }
   }
 
-  // Voice hook — sets input and auto-sends message
   const { voiceState, start: startVoice } = useVoice(
     lang,
     (text) => setInput(text),
@@ -197,12 +259,12 @@ function NavigatorInner() {
         </div>
       </nav>
 
-      {/* AI IDENTITY BAR */}
+      {/* CHAT HEADER */}
       <div style={{ background: C.iWhite, borderBottom: "1px solid " + C.border,
         padding: isMobile ? "10px 18px" : "12px 48px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: "50%", background: C.iBlue,
             display: "flex", alignItems: "center", justifyContent: "center",
             color: C.iWhite, flexShrink: 0 }}>
@@ -214,20 +276,11 @@ function NavigatorInner() {
             </div>
             <div style={{ fontFamily: F.body, fontSize: 12, color: C.t3 }}>
               {lang === "en"
-                ? "Powered by Claude AI - Not medical advice"
-                : "Con tecnologia Claude IA - No es consejo medico"}
+                ? "Powered by Claude AI — Not medical advice"
+                : "Con tecnologia Claude IA — No es consejo medico"}
             </div>
           </div>
         </div>
-        <button onClick={() => router.push(`/results?lang=${lang}`)}
-          style={{ display: "flex", alignItems: "center", gap: 6,
-            background: C.iBlue, color: C.iWhite, border: "none", borderRadius: 4,
-            padding: isMobile ? "8px 12px" : "9px 18px",
-            fontFamily: F.heading, fontSize: isMobile ? 13 : 14,
-            fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em", minHeight: 44 }}>
-          <IconSearch />
-          {lang === "en" ? "Find Care" : "Buscar"}
-        </button>
       </div>
 
       {/* CHAT MESSAGES */}
@@ -236,25 +289,47 @@ function NavigatorInner() {
         display: "flex", flexDirection: "column", gap: 16 }}>
 
         {messages.map((msg, i) => (
-          <div key={i} style={{ display: "flex",
-            justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-            alignItems: "flex-end", gap: 10 }}>
-            {msg.role === "ai" && (
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: C.blueL,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: C.iBlue, flexShrink: 0 }}>
-                <IconBot />
+          <div key={i}>
+            <div style={{ display: "flex",
+              justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+              alignItems: "flex-end", gap: 10 }}>
+              {msg.role === "ai" && (
+                <div style={{ width: 32, height: 32, borderRadius: "50%", background: C.blueL,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: C.iBlue, flexShrink: 0 }}>
+                  <IconBot />
+                </div>
+              )}
+              <div style={{ maxWidth: isMobile ? "85%" : "65%", padding: "12px 16px",
+                borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                background: msg.role === "user" ? C.iBlue : C.iWhite,
+                color: msg.role === "user" ? C.iWhite : C.t2,
+                fontFamily: F.body, fontSize: isMobile ? 15 : 16, lineHeight: 1.65,
+                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+                border: msg.role === "ai" ? "1px solid " + C.border : "none" }}>
+                {msg.loading ? <TypingDots /> : msg.text}
+              </div>
+            </div>
+
+            {/* ── Show Results button — appears after every AI response ── */}
+            {/* Only shows if the AI message has a resultsUrl (i.e. a real healthcare query) */}
+            {msg.role === "ai" && !msg.loading && msg.resultsUrl && (
+              <div style={{ display: "flex", justifyContent: "flex-start",
+                paddingLeft: 42, marginTop: 8 }}>
+                <button
+                  onClick={() => router.push(msg.resultsUrl!)}
+                  style={{ display: "flex", alignItems: "center", gap: 8,
+                    padding: "10px 18px", borderRadius: 8,
+                    background: C.iBlue, color: C.iWhite, border: "none",
+                    fontFamily: F.heading, fontSize: isMobile ? 13 : 14,
+                    fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em",
+                    minHeight: 44,
+                    boxShadow: "0 2px 8px rgba(10,31,98,0.2)" }}>
+                  <IconMap />
+                  {lang === "en" ? "Show Results on Map" : "Ver Resultados en Mapa"}
+                </button>
               </div>
             )}
-            <div style={{ maxWidth: isMobile ? "85%" : "65%", padding: "12px 16px",
-              borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-              background: msg.role === "user" ? C.iBlue : C.iWhite,
-              color: msg.role === "user" ? C.iWhite : C.t2,
-              fontFamily: F.body, fontSize: isMobile ? 15 : 16, lineHeight: 1.65,
-              boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-              border: msg.role === "ai" ? "1px solid " + C.border : "none" }}>
-              {msg.loading ? <TypingDots /> : msg.text}
-            </div>
           </div>
         ))}
 
@@ -278,7 +353,7 @@ function NavigatorInner() {
           </div>
         )}
 
-        {/* Voice listening indicator in chat area */}
+        {/* Voice listening indicator */}
         {voiceState === "listening" && (
           <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10,
@@ -337,14 +412,7 @@ function NavigatorInner() {
       <div style={{ background: C.iWhite, borderTop: "1px solid " + C.border,
         padding: isMobile ? "12px 18px" : "14px 48px",
         display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
-
-        {/* New VoiceButton — round, pulsing, turns red when listening */}
-        <VoiceButton
-          voiceState={voiceState}
-          onStart={startVoice}
-          size={48}
-        />
-
+        <VoiceButton voiceState={voiceState} onStart={startVoice} size={48} />
         <textarea
           ref={inputRef}
           value={input}
@@ -364,7 +432,6 @@ function NavigatorInner() {
             fontFamily: F.body, color: C.t2, background: C.card,
             outline: "none", resize: "none", lineHeight: 1.5,
             minHeight: 48, boxSizing: "border-box" }} />
-
         <button
           onClick={() => sendMessage(input)}
           disabled={loading || !input.trim()}

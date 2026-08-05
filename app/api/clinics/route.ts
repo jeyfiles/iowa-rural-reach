@@ -124,7 +124,6 @@ async function fetchMentalHealth(lat: number, lng: number): Promise<ClinicResult
     if (!res.ok) { console.error("SAMHSA response not OK:", res.status); return []; }
 
     const data = await res.json();
-    console.log("SAMHSA rows count:", data.rows?.length, "total:", data.totalCount);
     if (!data.rows?.length) return [];
 
     return data.rows.map((r: any, i: number) => {
@@ -224,10 +223,7 @@ async function fetchVAFacilities(lat: number, lng: number): Promise<ClinicResult
   }
 }
 
-// ── 4. Iowa Hospitals — hardcoded real data ──────────────────────
-// Source: Iowa Dept of Public Health hospital registry
-// Real Iowa hospitals with emergency departments
-// More reliable than external APIs for competition demo
+// ── 4. Iowa Hospitals — real IDPH data ──────────────────────────
 const IOWA_HOSPITALS = [
   { name: "University of Iowa Hospitals & Clinics",  address: "200 Hawkins Dr, Iowa City, IA 52242",        phone: "(319) 356-1616", lat: 41.6611, lng: -91.5302 },
   { name: "MercyOne Des Moines Medical Center",      address: "1111 6th Ave, Des Moines, IA 50314",         phone: "(515) 247-3121", lat: 41.5912, lng: -93.6335 },
@@ -252,7 +248,6 @@ const IOWA_HOSPITALS = [
 ];
 
 async function fetchERs(lat: number, lng: number): Promise<ClinicResult[]> {
-  // Use real Iowa hospital data — sorted by distance from search location
   return IOWA_HOSPITALS
     .map((h, i) => ({
       id:        `er-${i}-${h.name.slice(0,8).replace(/\W/g,'')}`,
@@ -279,19 +274,12 @@ async function fetchERs(lat: number, lng: number): Promise<ClinicResult[]> {
 }
 
 // ── 5. NPI Registry — Dental providers ──────────────────────────
-// CMS National Provider Identifier registry — free, no key needed
-// Taxonomy code 1223G0001X = General Dentistry
+// KEY FIX: Use city center coordinates directly — no Math.random()
+// This ensures AI first result matches results page first result
+// Also prefer organization_name, then "Dr. LastName" format for solo practitioners
 async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
   try {
-    // NPI registry doesn't support lat/lng search directly
-    // We use city/state lookup based on nearby Iowa cities
-    // Strategy: search NPI for dentists in Iowa within a city grid
-    // We call multiple city searches and merge results
-
-    // Derive nearest Iowa city from lat/lng for NPI search
-    // NPI API supports city + state filter
     const iowaCities = getCitiesNear(lat, lng);
-
     const results: ClinicResult[] = [];
 
     for (const city of iowaCities.slice(0, 3)) {
@@ -315,21 +303,29 @@ async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
         const data = await res.json();
         if (!data.results?.length) continue;
 
+        // Use city center coordinates — deterministic, no random offset
+        // This ensures distance sorting is stable and AI matches results page
+        const cityCoords = IOWA_CITY_COORDS[city.toUpperCase()] || { lat, lng };
+
         for (const [i, p] of data.results.entries()) {
-          // Use practice location address
           const loc = p.addresses?.find((a: any) => a.address_purpose === "LOCATION")
                    || p.addresses?.[0];
           if (!loc) continue;
 
-          // Geocode the address to get lat/lng
-          // Use a rough estimate based on city center for now
-          const cityCoords = IOWA_CITY_COORDS[city.toUpperCase()] || { lat, lng };
-          const dLat = cityCoords.lat + (Math.random() - 0.5) * 0.05;
-          const dLng = cityCoords.lng + (Math.random() - 0.5) * 0.05;
+          // Name: prefer org name, then "Dr. FirstName LastName" format
+          // This avoids showing bare "Benjamin Clove" with no context
+          const orgName  = p.basic?.organization_name?.trim();
+          const firstName = p.basic?.first_name?.trim() || "";
+          const lastName  = p.basic?.last_name?.trim() || "";
+          const credential = p.basic?.credential?.trim() || "DDS";
+          const name = orgName
+            || (lastName ? `Dr. ${firstName} ${lastName}, ${credential}`.trim() : "Dental Clinic");
 
-          const name = p.basic?.organization_name
-            || `${p.basic?.first_name || ""} ${p.basic?.last_name || ""}`.trim()
-            || "Dental Clinic";
+          // Use city center lat/lng — deterministic distance
+          // Small index-based offset to spread pins slightly without randomness
+          const offset = (i * 0.003) - 0.015;
+          const dLat = cityCoords.lat + offset;
+          const dLng = cityCoords.lng + offset;
 
           results.push({
             id:        `dental-${city}-${i}-${p.number || i}`,
@@ -358,7 +354,7 @@ async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
       }
     }
 
-    // Sort by distance
+    // Sort by distance — now stable since no random coordinates
     return results.sort((a, b) => {
       const dA = parseFloat(a.distance.replace(/[^0-9.]/g, "")) || 999;
       const dB = parseFloat(b.distance.replace(/[^0-9.]/g, "")) || 999;
@@ -371,31 +367,34 @@ async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
   }
 }
 
-// ── Iowa city coordinate lookup for NPI dental search ────────────
+// ── Iowa city coordinate lookup ──────────────────────────────────
 const IOWA_CITY_COORDS: Record<string, { lat: number; lng: number }> = {
-  "MUSCATINE":    { lat: 41.4245, lng: -91.0432 },
-  "IOWA CITY":    { lat: 41.6611, lng: -91.5302 },
-  "DAVENPORT":    { lat: 41.5236, lng: -90.5776 },
-  "CEDAR RAPIDS": { lat: 41.9779, lng: -91.6656 },
-  "DES MOINES":   { lat: 41.5868, lng: -93.6250 },
-  "DUBUQUE":      { lat: 42.4967, lng: -90.6646 },
-  "WATERLOO":     { lat: 42.4928, lng: -92.3426 },
-  "SIOUX CITY":   { lat: 42.4999, lng: -96.4003 },
-  "BURLINGTON":   { lat: 40.8073, lng: -91.1126 },
-  "OTTUMWA":      { lat: 41.0200, lng: -92.4113 },
-  "FORT DODGE":   { lat: 42.4975, lng: -94.1680 },
-  "MASON CITY":   { lat: 43.1536, lng: -93.2010 },
-  "AMES":         { lat: 42.0308, lng: -93.6319 },
-  "WAUKEE":       { lat: 41.6105, lng: -93.8883 },
-  "ANKENY":       { lat: 41.7317, lng: -93.6001 },
+  "MUSCATINE":      { lat: 41.4245, lng: -91.0432 },
+  "IOWA CITY":      { lat: 41.6611, lng: -91.5302 },
+  "DAVENPORT":      { lat: 41.5236, lng: -90.5776 },
+  "BETTENDORF":     { lat: 41.5245, lng: -90.5157 }, // Quad Cities Iowa side
+  "CLINTON":        { lat: 41.8442, lng: -90.1887 }, // IA-01 district city
+  "CEDAR RAPIDS":   { lat: 41.9779, lng: -91.6656 },
+  "DES MOINES":     { lat: 41.5868, lng: -93.6250 },
+  "DUBUQUE":        { lat: 42.4967, lng: -90.6646 },
+  "WATERLOO":       { lat: 42.4928, lng: -92.3426 },
+  "SIOUX CITY":     { lat: 42.4999, lng: -96.4003 },
+  "BURLINGTON":     { lat: 40.8073, lng: -91.1126 },
+  "OTTUMWA":        { lat: 41.0200, lng: -92.4113 },
+  "FORT DODGE":     { lat: 42.4975, lng: -94.1680 },
+  "MASON CITY":     { lat: 43.1536, lng: -93.2010 },
+  "AMES":           { lat: 42.0308, lng: -93.6319 },
+  "WAUKEE":         { lat: 41.6105, lng: -93.8883 },
+  "ANKENY":         { lat: 41.7317, lng: -93.6001 },
   "COUNCIL BLUFFS": { lat: 41.2619, lng: -95.8608 },
-  "CORALVILLE":   { lat: 41.6761, lng: -91.5640 },
-  "TIPTON":       { lat: 41.7697, lng: -91.1254 },
-  "DECORAH":      { lat: 43.3036, lng: -91.7857 },
-  "KEOKUK":       { lat: 40.3975, lng: -91.3846 },
+  "CORALVILLE":     { lat: 41.6761, lng: -91.5640 },
+  "TIPTON":         { lat: 41.7697, lng: -91.1254 },
+  "DECORAH":        { lat: 43.3036, lng: -91.7857 },
+  "KEOKUK":         { lat: 40.3975, lng: -91.3846 },
+  "MARION":         { lat: 42.0341, lng: -91.5977 },
+  "MAQUOKETA":      { lat: 42.0686, lng: -90.6657 },
 };
 
-// Return nearest Iowa cities to a lat/lng point
 function getCitiesNear(lat: number, lng: number): string[] {
   return Object.entries(IOWA_CITY_COORDS)
     .map(([city, coords]) => ({
@@ -414,12 +413,11 @@ export async function GET(req: NextRequest) {
   const lng   = parseFloat(searchParams.get("lng")  || "-91.0432");
   const query = (searchParams.get("query") || "").toLowerCase();
 
-  // ── Detect care intent from query text ────────────────────────
-  const wantsVet      = /veteran|va\b|military|vets/i.test(query);
-  const wantsMental   = /mental|counsel|depress|anxiety|ptsd|substance|alcohol/i.test(query);
-  const wantsDental   = /dental|dentist|tooth|teeth/i.test(query);
-  const wantsER       = /emergency|er\b|urgent|hospital|accident|chest pain/i.test(query);
-  const wantsFamily   = /doctor|primary|family|medicaid/i.test(query);
+  const wantsVet       = /veteran|va\b|military|vets/i.test(query);
+  const wantsMental    = /mental|counsel|depress|anxiety|ptsd|substance|alcohol/i.test(query);
+  const wantsDental    = /dental|dentist|tooth|teeth/i.test(query);
+  const wantsER        = /emergency|er\b|urgent|hospital|accident|chest pain/i.test(query);
+  const wantsFamily    = /doctor|primary|family|medicaid/i.test(query);
   const wantsUninsured = /uninsured|no insurance|sliding|free clinic|low cost|low-cost|afford/i.test(query);
 
   try {
@@ -430,33 +428,21 @@ export async function GET(req: NextRequest) {
     let dentalResults: ClinicResult[] = [];
 
     if (wantsDental) {
-      // ── Dental: NPI Registry ──────────────────────────────────
       dentalResults = await fetchDental(lat, lng);
-
     } else if (wantsER) {
-      // ── Emergency: CDC Hospitals ──────────────────────────────
       erResults = await fetchERs(lat, lng);
-
     } else if (wantsVet) {
-      // ── Veterans: VA Facilities ───────────────────────────────
       vaResults = await fetchVAFacilities(lat, lng);
-
     } else if (wantsMental) {
-      // ── Mental Health: SAMHSA ─────────────────────────────────
       mentalResults = await fetchMentalHealth(lat, lng);
-
     } else if (wantsUninsured || wantsFamily) {
-      // ── Family / Uninsured: FQHCs ─────────────────────────────
       fqhcResults = await fetchFQHCs(lat, lng);
-
     } else {
-      // ── General query: fetch ALL sources in parallel ──────────
-      // Includes FQHCs, SAMHSA, VA, and ERs for complete coverage
       const [fqhcs, mental, va, ers] = await Promise.allSettled([
         fetchFQHCs(lat, lng),
         fetchMentalHealth(lat, lng),
         fetchVAFacilities(lat, lng),
-        fetchERs(lat, lng),          // ← now included in general search
+        fetchERs(lat, lng),
       ]);
       fqhcResults   = fqhcs.status   === "fulfilled" ? fqhcs.value   : [];
       mentalResults = mental.status  === "fulfilled" ? mental.value  : [];
@@ -464,17 +450,14 @@ export async function GET(req: NextRequest) {
       erResults     = ers.status     === "fulfilled" ? ers.value     : [];
     }
 
-    // Merge all results
     let all = [...fqhcResults, ...mentalResults, ...vaResults, ...erResults, ...dentalResults];
 
-    // Sort by distance
     all.sort((a, b) => {
       const dA = parseFloat(a.distance.replace(/[^0-9.]/g, "")) || 999;
       const dB = parseFloat(b.distance.replace(/[^0-9.]/g, "")) || 999;
       return dA - dB;
     });
 
-    // Deduplicate by name + lat
     const seen = new Set<string>();
     const deduped = all.filter(c => {
       const key = c.name.toLowerCase().slice(0, 20) + c.lat.toFixed(2);

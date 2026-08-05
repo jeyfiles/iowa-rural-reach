@@ -8,6 +8,7 @@ import { translateService, translateInsurance } from "../lib/translations";
 import { Clinic } from "../lib/types";
 import { useVoice } from "../lib/useVoice";
 import { VoiceButton } from "../lib/VoiceButton";
+import { extractLocation, normalizeLocation } from "../lib/locationUtils";
 
 function IconStethoscope({ size = 20 }: { size?: number }) {
   return (
@@ -39,12 +40,14 @@ function IconTooth({ size = 20 }: { size?: number }) {
   );
 }
 
-function IconShield({ size = 20 }: { size?: number }) {
+function IconMedal({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      <path d="m9 12 2 2 4-4"/>
+      <circle cx="12" cy="14" r="6"/>
+      <path d="M8 3h8l-1.5 5h-5L8 3z"/>
+      <path d="M12 10v4"/>
+      <path d="m10 13 2 2 2-2"/>
     </svg>
   );
 }
@@ -141,7 +144,7 @@ function getTypeProps(type: Clinic["type"], lang: "en"|"es" = "en") {
     family:    { icon: <IconStethoscope />, color: C.iBlue,   bg: C.blueL,   label: lang === "en" ? "Family Care"   : "Atencion Familiar", pinColor: "#0A1F62" },
     mental:    { icon: <IconBrain />,       color: "#166534", bg: "#DCFCE7", label: lang === "en" ? "Mental Health" : "Salud Mental",       pinColor: "#166534" },
     dental:    { icon: <IconTooth />,       color: "#6B21A8", bg: "#F3E8FF", label: lang === "en" ? "Dental"        : "Dental",             pinColor: "#6B21A8" },
-    veteran:   { icon: <IconShield />,      color: "#7A5E00", bg: C.goldL,   label: lang === "en" ? "Veterans Care" : "Veteranos",          pinColor: "#B45309" },
+    veteran:   { icon: <IconMedal />,       color: "#7A5E00", bg: C.goldL,   label: lang === "en" ? "Veterans Care" : "Veteranos",          pinColor: "#B45309" },
     er:        { icon: <IconAmbulance />,   color: C.iRed,    bg: C.redL,    label: lang === "en" ? "Emergency"     : "Emergencia",         pinColor: "#D80025" },
     uninsured: { icon: <IconHeart />,       color: "#166534", bg: "#DCFCE7", label: lang === "en" ? "No Insurance"  : "Sin Seguro",         pinColor: "#166534" },
   };
@@ -553,14 +556,27 @@ function ResultsInner() {
       setLoading(true);
       setApiError(false);
       try {
-        const geoQuery = query || "Muscatine Iowa";
-        const geoRes   = await fetch(`/api/geocode?address=${encodeURIComponent(geoQuery)}`);
-        const geoData  = await geoRes.json();
+        // Extract a clean location from the query before geocoding.
+        // e.g. "show me options in Quad Cities area" → "Davenport, Iowa"
+        // e.g. "clinton" → "Clinton, Iowa"
+        // Falls back to normalizeLocation which at minimum appends Iowa.
+        const locationForGeo = query
+          ? (extractLocation(query) || normalizeLocation(query))
+          : "Muscatine, Iowa";
+
+        const geoRes  = await fetch(`/api/geocode?address=${encodeURIComponent(locationForGeo)}`);
+        const geoData = await geoRes.json();
         const lat = geoData.lat || 41.4245;
         const lng = geoData.lng || -91.0432;
         setCenterLat(lat);
         setCenterLng(lng);
-        if (geoData.formattedAddress) setLocationLabel(geoData.formattedAddress);
+        // Only update location label if result was not vague
+        if (geoData.formattedAddress && !geoData.vague) {
+          setLocationLabel(geoData.formattedAddress);
+        } else if (geoData.vague) {
+          // Show the cleaned location string, not "Iowa, USA"
+          setLocationLabel(locationForGeo);
+        }
 
         const catQueryMap: Record<string, string> = {
           family:    "doctor primary family",
@@ -593,7 +609,13 @@ function ResultsInner() {
   const { voiceState, start: startVoice } = useVoice(
     lang,
     (text) => setSearchQuery(text),
-    (text) => router.push(`/results?q=${encodeURIComponent(text)}&lang=${lang}`)
+    (text) => {
+      // Extract location from full spoken transcript before routing.
+      // e.g. "show me options in Quad Cities area" → q=Davenport, Iowa
+      // Falls back to normalizeLocation (appends Iowa) if no pattern match.
+      const loc = extractLocation(text) || normalizeLocation(text);
+      router.push(`/results?q=${encodeURIComponent(loc)}&lang=${lang}`);
+    }
   );
 
   function navToCategory(cat: string) {
@@ -796,12 +818,23 @@ function ResultsInner() {
           background: C.card, borderRadius: 4, border: "1px solid " + C.border,
           padding: "6px 16px", minHeight: 52 }}>
           <VoiceButton voiceState={voiceState} onStart={startVoice} size={36} />
-          <span style={{ fontFamily: F.body, fontSize: isMobile ? 14 : 16,
-            color: searchQuery ? C.t2 : C.t4, flex: 1 }}>
-            {voiceState === "listening"
+          <input
+            type="text"
+            value={voiceState === "listening"
               ? (lang === "en" ? "Listening... speak now" : "Escuchando... hable ahora")
-              : searchQuery || (lang === "en" ? "Search for care near you..." : "Buscar atencion...")}
-          </span>
+              : searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" && searchQuery.trim()) {
+                const loc = extractLocation(searchQuery) || normalizeLocation(searchQuery);
+                router.push(`/results?q=${encodeURIComponent(loc)}&lang=${lang}`);
+              }
+            }}
+            placeholder={lang === "en" ? "Search for care near you..." : "Buscar atencion..."}
+            readOnly={voiceState === "listening"}
+            style={{ flex: 1, border: "none", outline: "none",
+              fontFamily: F.body, fontSize: isMobile ? 14 : 16,
+              color: C.t2, background: "transparent", minWidth: 0 }} />
           {!loading && locationLabel && (
             <span style={{ fontFamily: F.body, fontSize: 12,
               color: C.t4, whiteSpace: "nowrap",
@@ -810,13 +843,21 @@ function ResultsInner() {
             </span>
           )}
         </div>
-        <button onClick={() => router.push(`/?lang=${lang}`)}
+        <button
+          onClick={() => {
+            if (searchQuery.trim()) {
+              const loc = extractLocation(searchQuery) || normalizeLocation(searchQuery);
+              router.push(`/results?q=${encodeURIComponent(loc)}&lang=${lang}`);
+            } else {
+              router.push(`/?lang=${lang}`);
+            }
+          }}
           style={{ background: C.iBlue, color: C.iWhite, border: "none", borderRadius: 4,
             padding: isMobile ? "10px 14px" : "12px 24px",
             fontFamily: F.heading, fontSize: isMobile ? 13 : 15,
             fontWeight: 700, cursor: "pointer", letterSpacing: "0.04em",
             minHeight: 52, whiteSpace: "nowrap" }}>
-          {lang === "en" ? "New Search" : "Nueva Busqueda"}
+          {lang === "en" ? "Search" : "Buscar"}
         </button>
       </div>
 
