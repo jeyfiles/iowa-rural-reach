@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isExcludedAddress } from "../../lib/exclusions";
 
 // ── Types ────────────────────────────────────────────────────────
 interface ClinicResult {
@@ -44,71 +43,62 @@ function formatPhone(raw: string): string {
   return raw;
 }
 
-// ── 1. HRSA Data Warehouse Locator API — FQHCs (family care + uninsured) ──
-// CHANGED 2026-09-11: was onemap.cdc.gov (CDC's periodic mirror of HRSA's
-// site file). That mirror was confirmed stale — e.g. for Muscatine, IA it
-// still listed "Community Health Care, Inc. Muscatine Clinic" (2925 Cedar
-// St) as Active and was missing "...Muscatine New Building" (1221 Park Ave)
-// entirely. This endpoint is the same live source that backs HRSA's own
-// public "Find a Health Center" tool (findahealthcenter.hrsa.gov), so
-// results match what HRSA itself currently shows. It also returns results
-// pre-sorted by distance with no arbitrary record cap, unlike the old
-// ArcGIS query (which capped at 25 results in non-distance order).
-//
-// TRADE-OFF: this API's response is leaner than the old CDC feed — it has
-// no grant-type flags (no way to tell "family" vs "uninsured" per site, no
-// homeless/migrant/school-based service flags), and there's no shared key
-// to safely merge it with the old feed for that metadata (this API's `Id`
-// and the CDC feed's `Health_Center_Number` don't correspond). So every
-// result below defaults to type "family" with a generic FQHC service list.
-// This does NOT change filtering behavior: app/results/page.tsx's
-// "uninsured" filter already matches `type === "uninsured" || (type ===
-// "family" && sliding)`, and `sliding` stays true for every FQHC result
-// exactly as it was before — so uninsured/sliding-scale search results are
-// unaffected. `insurance` was already a static list, not derived from the
-// feed, so that's unchanged too. The only visible difference is that some
-// cards that used to show a "No Insurance" badge will now show "Family
-// Care" instead — a label difference, not a functional one.
+// ── 1. CDC OneMap — FQHCs (family care + uninsured) ──────────────
 async function fetchFQHCs(lat: number, lng: number): Promise<ClinicResult[]> {
   try {
-    const url = `https://data.hrsa.gov/HDWLocatorApi/healthcenters/find?lon=${lng}&lat=${lat}&radius=40`;
+    const bbox = `${lng - 1},${lat - 1},${lng + 1},${lat + 1}`;
+    const url = [
+      "https://onemap.cdc.gov/onemapservices/rest/services/NCCDPHP/CDC_hospitals/MapServer/2/query",
+      `?where=1%3D1`,
+      `&geometry=${encodeURIComponent(bbox)}`,
+      `&geometryType=esriGeometryEnvelope`,
+      `&inSR=4326`,
+      `&spatialRel=esriSpatialRelIntersects`,
+      `&outFields=*`,
+      `&outSR=4326`,
+      `&returnGeometry=true`,
+      `&resultRecordCount=25`,
+      `&f=json`,
+    ].join("");
 
     const res = await fetch(url, {
       headers: { "Accept": "application/json" },
       next: { revalidate: 3600 },
     });
 
-    if (!res.ok) { console.error("HRSA HDWLocatorApi response not OK:", res.status); return []; }
-
+    if (!res.ok) return [];
     const data = await res.json();
-    if (!Array.isArray(data) || !data.length) return [];
+    if (!data.features?.length) return [];
 
-    return data.slice(0, 30).map((r: any, i: number) => {
-      const rLat = typeof r.Latitude  === "number" ? r.Latitude  : lat;
-      const rLng = typeof r.Longitude === "number" ? r.Longitude : lng;
-      const dist = typeof r.Distance === "number"
-        ? (r.Distance < 1 ? "< 1 mi" : `${r.Distance.toFixed(1)} mi`)
-        : calcDistance(lat, lng, rLat, rLng);
+    return data.features.map((f: any, i: number) => {
+      const a    = f.attributes;
+      const fLng = a.Geocoding_Artifact_Address_Prim || f.geometry?.x || lng;
+      const fLat = a.Geocoding_Artifact_Address_Pr_1 || f.geometry?.y || lat;
 
       return {
-        id:        `fqhc-${r.Id ?? i}`,
-        name:      r.CtrNm || "Community Health Center",
-        address:   [r.CtrAddress, r.CtrCity, r.CtrStateAbbr, r.CtrZipCd].filter(Boolean).join(", "),
-        phone:     formatPhone(r.CtrPhoneNum || ""),
-        distance:  dist,
-        open:      r.EndDt == null,
-        type:      "family" as const,
+        id:       `fqhc-${i}-${a.Health_Center_Number}-${(a.Site_Name || '').slice(0,8).replace(/\W/g,'')}`,
+        name:      a.Site_Name || a.Health_Center_Name || "Community Health Center",
+        address:   [a.Site_Address, a.Site_City, a.Site_State_Abbreviation, a.Site_Postal_Code].filter(Boolean).join(", "),
+        phone:     formatPhone(a.Site_Telephone_Number || ""),
+        distance:  calcDistance(lat, lng, fLat, fLng),
+        open:      a.Site_Status_Description === "Active",
+        type:      a.Community_Health_HRSA_Grant_Sub === "Y" ? "family" as const : "uninsured" as const,
         insurance: ["Medicaid", "Medicare", "Uninsured OK", "Sliding Scale"],
-        services:  ["Primary Care", "Preventive Care", "Immunizations"],
+        services:  [
+          "Primary Care", "Preventive Care", "Immunizations",
+          ...(a.Health_Care_for_the_Homeless_HR === "Y" ? ["Homeless Services"] : []),
+          ...(a.Migrant_Health_Centers_HRSA_Gra === "Y" ? ["Migrant Health"] : []),
+          ...(a.School_Based_Health_Center_HRSA === "Y" ? ["School-Based Care"] : []),
+        ],
         telehealth: false,
         sliding:    true,
-        lat:        rLat,
-        lng:        rLng,
-        source:     "HRSA Data Warehouse",
+        lat:        fLat,
+        lng:        fLng,
+        source:     "HRSA/CDC",
       };
     });
   } catch (err) {
-    console.error("HRSA FQHC fetch error:", err);
+    console.error("FQHC fetch error:", err);
     return [];
   }
 }
@@ -469,19 +459,12 @@ export async function GET(req: NextRequest) {
     });
 
     const seen = new Set<string>();
-    const deduped = all
-      .filter(c => {
-        const key = c.name.toLowerCase().slice(0, 20) + c.lat.toFixed(2);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      // Data-governance exclusion list -- see app/lib/exclusions.ts.
-      // Filters known-wrong listings (closed/duplicate/moved) that the
-      // upstream source hasn't corrected yet. Covers every category and
-      // both the results page and the AI chat navigator, since both read
-      // from this one endpoint.
-      .filter(c => !isExcludedAddress(c.address));
+    const deduped = all.filter(c => {
+      const key = c.name.toLowerCase().slice(0, 20) + c.lat.toFixed(2);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     return NextResponse.json({
       clinics: deduped,

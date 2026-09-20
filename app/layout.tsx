@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,6 +23,11 @@ export default function RootLayout({
         />
       </head>
       <body style={{ margin: 0, padding: 0 }}>{children}</body>
+      {/* Only loads once NEXT_PUBLIC_GA_ID is set (.env.local / Vercel env vars) --
+          local dev sends no analytics data until that's filled in. */}
+      {process.env.NEXT_PUBLIC_GA_ID && (
+        <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
+      )}
     </html>
   );
 }

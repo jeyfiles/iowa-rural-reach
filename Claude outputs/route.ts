@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isExcludedAddress } from "../../lib/exclusions";
 
 // ── Types ────────────────────────────────────────────────────────
 interface ClinicResult {
@@ -469,19 +468,12 @@ export async function GET(req: NextRequest) {
     });
 
     const seen = new Set<string>();
-    const deduped = all
-      .filter(c => {
-        const key = c.name.toLowerCase().slice(0, 20) + c.lat.toFixed(2);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      // Data-governance exclusion list -- see app/lib/exclusions.ts.
-      // Filters known-wrong listings (closed/duplicate/moved) that the
-      // upstream source hasn't corrected yet. Covers every category and
-      // both the results page and the AI chat navigator, since both read
-      // from this one endpoint.
-      .filter(c => !isExcludedAddress(c.address));
+    const deduped = all.filter(c => {
+      const key = c.name.toLowerCase().slice(0, 20) + c.lat.toFixed(2);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     return NextResponse.json({
       clinics: deduped,

@@ -9,6 +9,7 @@ import { Clinic } from "../lib/types";
 import { useVoice } from "../lib/useVoice";
 import { VoiceButton } from "../lib/VoiceButton";
 import { extractLocation, normalizeLocation } from "../lib/locationUtils";
+import RequestChangeModal, { ReportedClinic } from "../components/RequestChangeModal";
 
 function IconStethoscope({ size = 20 }: { size?: number }) {
   return (
@@ -196,8 +197,8 @@ function LiteLoadingSkeleton() {
 
 // ── Lite Mode clinic card — text only, no images or animations ───
 // Designed for slow 2G/3G connections — minimal CSS, fast render
-function LiteClinicCard({ clinic, lang, onClick }: {
-  clinic: Clinic; lang: "en"|"es"; onClick: () => void;
+function LiteClinicCard({ clinic, lang, onClick, onReport }: {
+  clinic: Clinic; lang: "en"|"es"; onClick: () => void; onReport: (c: ReportedClinic) => void;
 }) {
   const tp = getTypeProps(clinic.type, lang);
   return (
@@ -205,9 +206,19 @@ function LiteClinicCard({ clinic, lang, onClick }: {
       style={{ background: C.iWhite, border: "1px solid " + C.border,
         borderLeft: "4px solid " + tp.color,
         padding: "14px 16px", marginBottom: 10, cursor: "pointer" }}>
-      <div style={{ fontFamily: F.heading, fontSize: 16, fontWeight: 700,
-        color: C.iBlue, marginBottom: 4 }}>
-        {clinic.name}
+      <div style={{ display: "flex", justifyContent: "space-between",
+        alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+        <div style={{ fontFamily: F.heading, fontSize: 16, fontWeight: 700,
+          color: C.iBlue }}>
+          {clinic.name}
+        </div>
+        <button
+          onClick={e => { e.stopPropagation(); onReport({ name: clinic.name, address: clinic.address }); }}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, flexShrink: 0,
+            fontFamily: F.body, fontSize: 12, fontWeight: 600, color: C.iBlue,
+            textDecoration: "underline", whiteSpace: "nowrap" }}>
+          {lang === "en" ? "Request Change" : "Solicitar Cambio"}
+        </button>
       </div>
       <div style={{ fontFamily: F.body, fontSize: 13, color: C.t3, marginBottom: 6 }}>
         {tp.label} · {clinic.distance} {lang === "en" ? "away" : "de distancia"}
@@ -377,8 +388,8 @@ function MiniCard({ clinic, isMobile, lang, onClick, selected }: {
 }
 
 // ── Full clinic card ─────────────────────────────────────────────
-function ClinicCard({ clinic, isMobile, lang, onClick }: {
-  clinic: Clinic; isMobile: boolean; lang: "en"|"es"; onClick: () => void;
+function ClinicCard({ clinic, isMobile, lang, onClick, onReport }: {
+  clinic: Clinic; isMobile: boolean; lang: "en"|"es"; onClick: () => void; onReport: (c: ReportedClinic) => void;
 }) {
   const tp = getTypeProps(clinic.type, lang);
   return (
@@ -432,6 +443,13 @@ function ClinicCard({ clinic, isMobile, lang, onClick }: {
             </div>
           </div>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <button
+              onClick={e => { e.stopPropagation(); onReport({ name: clinic.name, address: clinic.address }); }}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 6,
+                fontFamily: F.body, fontSize: 12, fontWeight: 600, color: C.iBlue,
+                textDecoration: "underline", whiteSpace: "nowrap" }}>
+              {lang === "en" ? "Request Change" : "Solicitar Cambio"}
+            </button>
             <div style={{ fontFamily: F.heading, fontSize: isMobile ? 18 : 22,
               fontWeight: 700, color: C.iBlue }}>
               {clinic.distance}
@@ -500,6 +518,7 @@ function ResultsInner() {
   const [isMobile, setIsMobile]       = useState(false);
   const [viewMode, setViewMode]       = useState<"list"|"map">("list");
   const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
+  const [reportingClinic, setReportingClinic] = useState<ReportedClinic | null>(null);
 
   // ── Real API state ─────────────────────────────────────────────
   const [allClinics, setAllClinics]       = useState<Clinic[]>([]);
@@ -730,7 +749,8 @@ function ResultsInner() {
                   onClick={() => {
                     sessionStorage.setItem("rrClinic", JSON.stringify(clinic));
                     router.push(`/clinic/${clinic.id}?lang=${lang}`);
-                  }} />
+                  }}
+                  onReport={setReportingClinic} />
               ))}
               {filtered.length === 0 && (
                 <div style={{ fontFamily: F.body, fontSize: 15, color: C.t3, padding: "20px 0" }}>
@@ -959,7 +979,8 @@ function ResultsInner() {
                 onClick={() => {
                   sessionStorage.setItem("rrClinic", JSON.stringify(clinic));
                   router.push(`/clinic/${clinic.id}?lang=${lang}`);
-                }} />
+                }}
+                onReport={setReportingClinic} />
             ))}
           </div>
           {filtered.length === 0 && (
@@ -1079,6 +1100,13 @@ function ResultsInner() {
           </a>
         </div>
       )}
+
+      <RequestChangeModal
+        isOpen={!!reportingClinic}
+        onClose={() => setReportingClinic(null)}
+        clinic={reportingClinic}
+        lang={lang}
+      />
     </main>
   );
 }

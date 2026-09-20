@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { COLORS as C, FONTS as F, CATEGORIES } from "./lib/constants";
 import { useVoice } from "./lib/useVoice";
 import { VoiceButton } from "./lib/VoiceButton";
+import FeedbackModal from "./components/FeedbackModal";
 
 function IconStethoscope() {
   return (
@@ -86,6 +87,7 @@ export default function Home() {
   const [lang, setLang]           = useState<"en"|"es">("en");
   const [activeIdx, setActiveIdx] = useState<number|null>(null);
   const [isMobile, setIsMobile]   = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("rrLang") as "en"|"es" | null;
@@ -356,6 +358,28 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {/* FEEDBACK LINK */}
+      <div style={{ textAlign: "center", padding: "20px 18px 8px" }}>
+        <button onClick={() => setFeedbackOpen(true)}
+          style={{ background: "none", border: "none", cursor: "pointer",
+            fontFamily: F.body, fontSize: 14, fontWeight: 600,
+            color: C.iBlue, textDecoration: "underline" }}>
+          {lang === "en" ? "Give Feedback" : "Danos tu Opinion"}
+        </button>
+      </div>
+
+      {/* PRIVACY NOTE — plain-language disclosure, not a consent gate.
+          See project notes: GDPR/CCPA thresholds don't clearly apply here,
+          but a short honest line is worth having for judges/SMEs regardless. */}
+      <div style={{ textAlign: "center", padding: "0 18px 20px" }}>
+        <p style={{ fontFamily: F.body, fontSize: 11, color: C.t4, margin: 0, lineHeight: 1.5 }}>
+          {lang === "en"
+            ? "This app uses Google Analytics to understand how many people use it. No personal health information is collected."
+            : "Esta aplicacion usa Google Analytics para saber cuantas personas la usan. No se recopila informacion medica personal."}
+        </p>
+      </div>
+      <FeedbackModal isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} lang={lang} />
     </main>
   );
 }
