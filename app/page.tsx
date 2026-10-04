@@ -71,13 +71,28 @@ function IconHeart() {
   );
 }
 
+// Chiropractic — spine, same 26px / 1.8 stroke style as the icons above
+function IconSpine() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="8.5" y="2.5" width="7" height="3.5" rx="1.5"/>
+      <rect x="8" y="7.5" width="8" height="3.5" rx="1.5"/>
+      <rect x="8" y="12.5" width="8" height="3.5" rx="1.5"/>
+      <rect x="8.5" y="17.5" width="7" height="3.5" rx="1.5"/>
+      <path d="M5.5 9.25h2.5M16 9.25h2.5M5.5 14.25h2.5M16 14.25h2.5"/>
+    </svg>
+  );
+}
+
 const CAT_ICONS = [
   <IconStethoscope key="f" />,   // 0 — Family Care
   <IconBrain       key="m" />,   // 1 — Mental Health
   <IconMedal       key="v" />,   // 2 — Veterans Care
   <IconAmbulance   key="e" />,   // 3 — Emergency
   <IconTooth       key="d" />,   // 4 — Dental
-  <IconHeart       key="u" />,   // 5 — No Insurance
+  <IconSpine       key="c" />,   // 5 — Chiropractic
+  <IconHeart       key="u" />,   // 6 — No Insurance
 ];
 
 export default function Home() {

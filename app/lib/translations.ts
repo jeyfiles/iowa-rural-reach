@@ -40,6 +40,8 @@ const SERVICE_TRANSLATIONS: Record<string, string> = {
   "Cleanings":                 "Limpiezas Dentales",
   "X-Rays":                    "Radiografias",
   "Emergency Dental":          "Emergencia Dental",
+  // Chiropractic services
+  "Chiropractic Care":         "Atencion Quiropractica",
 };
 
 const INSURANCE_TRANSLATIONS: Record<string, string> = {

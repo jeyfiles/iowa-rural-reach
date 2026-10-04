@@ -1,50 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// ── Intent detection ─────────────────────────────────────────────
-function detectCareType(msg: string): string {
-  const m = msg.toLowerCase();
-  if (/veteran|va\b|military|vets/i.test(m))                           return "veteran va military";
-  if (/mental|counsel|depress|anxiety|ptsd|substance|alcohol/i.test(m)) return "mental health counseling";
-  if (/dental|dentist|tooth|teeth/i.test(m))                           return "dental dentist";
-  if (/emergency|er\b|urgent|hospital|accident|chest pain/i.test(m))   return "emergency hospital urgent";
-  if (/uninsured|no insurance|sliding|free clinic|afford/i.test(m))    return "uninsured sliding scale";
-  if (/doctor|primary|family|medicaid|checkup/i.test(m))               return "doctor primary family";
-  return "";
-}
+import { detectCare, parseSearch } from "../../lib/careIntent";
+
+// Intent + location detection live in lib/careIntent.ts (shared with the
+// results page, navigator and clinics API so they can't drift apart).
 
 // ── Detect out-of-scope requests ─────────────────────────────────
 function isOutOfScope(msg: string): boolean {
   return /walgreens|cvs|walmart|target|hy-?vee|fareway|aldi|kroger|costco|restaurant|gas station|directions to|address of|where is the|grocery|pharmacy location|drug store/i.test(msg);
 }
 
-// ── Extract location from user message ───────────────────────────
-function extractLocation(msg: string): string | null {
-  const patterns = [
-    /(?:near|in|around|close to|from)\s+([A-Za-z][a-zA-Z\s]+?)(?:\s*[,.]|$)/i,
-    /([A-Za-z][a-zA-Z\s]+),?\s*Iowa/i,
-    /([A-Za-z][a-zA-Z\s]+),?\s*IA\b/i,
-  ];
-  const falsePositives = ["i", "a", "the", "my", "me", "we", "us", "help", "care", "need", "want", "iowa"];
-  for (const p of patterns) {
-    const m = msg.match(p);
-    if (m?.[1]) {
-      const loc = m[1].trim();
-      if (!falsePositives.includes(loc.toLowerCase())) {
-        return loc + ", Iowa";
-      }
-    }
-  }
-  return null;
+// ── Geocode a place name (null = not found) ──────────────────────
+async function geocode(place: string, baseUrl: string) {
+  try {
+    const r = await fetch(`${baseUrl}/api/geocode?address=${encodeURIComponent(place)}`);
+    const g = await r.json();
+    if (!r.ok || g.notFound || typeof g.lat !== "number") return null;
+    return { lat: g.lat as number, lng: g.lng as number,
+             label: String(g.formattedAddress || place.replace(/,\s*iowa$/i, "")) };
+  } catch { return null; }
 }
 
-// ── Fetch real clinics ────────────────────────────────────────────
-async function fetchNearbyClinics(location: string, careType: string, baseUrl: string) {
+// ── Fetch real clinics for known coordinates ──────────────────────
+async function fetchNearbyClinics(lat: number, lng: number, cat: string, baseUrl: string) {
   try {
-    const geoRes      = await fetch(`${baseUrl}/api/geocode?address=${encodeURIComponent(location)}`);
-    const geoData     = await geoRes.json();
-    const lat         = geoData.lat || 41.4245;
-    const lng         = geoData.lng || -91.0432;
-    const clinicsRes  = await fetch(`${baseUrl}/api/clinics?lat=${lat}&lng=${lng}&query=${encodeURIComponent(careType)}`);
+    const clinicsRes  = await fetch(
+      `${baseUrl}/api/clinics?lat=${lat}&lng=${lng}&cat=${encodeURIComponent(cat)}`
+    );
     const clinicsData = await clinicsRes.json();
     return {
       clinics: clinicsData.clinics?.slice(0, 3) || [],
@@ -53,6 +35,42 @@ async function fetchNearbyClinics(location: string, careType: string, baseUrl: s
   } catch {
     return { clinics: [], count: 0 };
   }
+}
+
+// ── Work out care type + location across the whole conversation ───
+// Fixes two multi-turn bugs:
+//  • "chiros near me" → AI asks for city → user replies "waukee": the
+//    reply alone has no care word and no "in/near", so it was ignored.
+//    Now: care type falls back to the latest earlier user message, and a
+//    short reply (≤ 4 words) is accepted as a place name.
+//  • A city already chosen on the results page (sent by the browser as
+//    knownLocation) is reused for "near me" instead of asking again.
+type HistoryMsg = { role: string; text: string };
+type KnownLoc   = { lat: number; lng: number; label: string } | null;
+
+function careFromConversation(message: string, history: HistoryMsg[]): string {
+  const now = detectCare(message);
+  if (now) return now;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role !== "user") continue;
+    const c = detectCare(history[i].text);
+    if (c) return c;
+  }
+  return "";
+}
+
+// explicit = the user clearly named a place ("in Waukee", "52761", "Ames, Iowa").
+// A short reply like "waukee" is a guess (could also be "back pain").
+function placeFromMessage(message: string): { place: string; explicit: boolean } | null {
+  const strict = parseSearch(message, true);
+  if (strict.place) return { place: strict.place, explicit: true };
+  if (strict.nearMe) return null;
+  const words = message.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 4) {
+    const loose = parseSearch(message, false).place;   // "waukee", "cedar falls"
+    if (loose) return { place: loose, explicit: false };
+  }
+  return null;
 }
 
 // ── Format clinics for Claude context ────────────────────────────
@@ -81,6 +99,7 @@ Clinic types in the app:
 - Veterans Care: VA facilities, veteran benefits
 - Emergency: ER, urgent care
 - No Insurance: sliding scale, free clinics
+- Chiropractic: chiropractors
 
 Rules — follow these strictly:
 1. NEVER ask follow-up questions. NEVER end your response with a question. Period.
@@ -114,7 +133,13 @@ Example — dental with count:
 // ── Main POST handler ─────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
-    const { message, history } = await req.json();
+    const body = await req.json();
+    const message: string        = String(body.message || "");
+    const history: HistoryMsg[]  = Array.isArray(body.history) ? body.history : [];
+    const known: KnownLoc =
+      body.knownLocation && typeof body.knownLocation.lat === "number" && typeof body.knownLocation.lng === "number"
+        ? { lat: body.knownLocation.lat, lng: body.knownLocation.lng, label: String(body.knownLocation.label || "") }
+        : null;
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
@@ -122,9 +147,11 @@ export async function POST(req: NextRequest) {
     }
 
     const baseUrl  = req.nextUrl.origin;
-    const location = extractLocation(message);
-    const careType = detectCareType(message);
+    const careType = careFromConversation(message, history);
 
+    // What we resolved — sent back so the browser can remember the city
+    // and build the Show Results link from the same answer.
+    let resolved: { cat: string; lat: number; lng: number; label: string } | null = null;
     let enrichedMessage: string;
 
     if (isOutOfScope(message)) {
@@ -133,20 +160,32 @@ export async function POST(req: NextRequest) {
 
 [CLINIC DATA NOTE: OUT OF SCOPE REQUEST. Do NOT mention any clinics. Follow Rule 10 exactly.]`;
 
-    } else if (!location) {
-      // Path 2 — no location found
-      enrichedMessage = `${message}
+    } else {
+      // Location: a place in this message wins; otherwise the city the
+      // user already set earlier in this browser tab.
+      // If they clearly named a place we can't find, ask again rather than
+      // silently using an older city.
+      const asked = placeFromMessage(message);
+      const geo   = asked ? await geocode(asked.place, baseUrl) : null;
+      const loc   = geo ?? (asked?.explicit ? null : known);
+
+      if (!loc) {
+        // Path 2 — no usable location
+        enrichedMessage = `${message}
 
 [CLINIC DATA NOTE: NO LOCATION DETECTED. Do NOT show any clinics. Follow Rule 9 — ask which city or town in Iowa they are in.]`;
+      } else {
+        // Path 3 — location known, fetch real clinics with total count
+        resolved = { cat: careType, lat: loc.lat, lng: loc.lng, label: loc.label };
+        const found     = await fetchNearbyClinics(loc.lat, loc.lng, careType, baseUrl);
+        const clinicCtx = formatClinicsForPrompt(found.clinics, found.count);
+        const where     = loc.label || "the user's area";
+        const careNote  = careType ? ` Care type: ${careType}.` : "";
+        enrichedMessage = `${message}
 
-    } else {
-      // Path 3 — location found, fetch real clinics with total count
-      const { clinics, count } = await fetchNearbyClinics(location, careType, baseUrl);
-      const clinicCtx = formatClinicsForPrompt(clinics, count);
-      enrichedMessage = `${message}
-
-[REAL CLINIC DATA from Iowa Rural Reach database for ${location}:]
+[REAL CLINIC DATA from Iowa Rural Reach database for ${where}.${careNote} Name ${where} in your answer.]
 ${clinicCtx}`;
+      }
     }
 
     const messages = [
@@ -184,7 +223,7 @@ ${clinicCtx}`;
     const text = data.content?.[0]?.text ??
       "I am sorry, I could not process that. Please try again.";
 
-    return NextResponse.json({ text });
+    return NextResponse.json({ text, resolved });
 
   } catch (err) {
     console.error("Chat route error:", err);

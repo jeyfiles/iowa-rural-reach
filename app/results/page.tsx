@@ -8,7 +8,9 @@ import { translateService, translateInsurance } from "../lib/translations";
 import { Clinic } from "../lib/types";
 import { useVoice } from "../lib/useVoice";
 import { VoiceButton } from "../lib/VoiceButton";
-import { extractLocation, normalizeLocation } from "../lib/locationUtils";
+import { normalizeLocation } from "../lib/locationUtils";
+import { parseSearch } from "../lib/careIntent";
+import { StoredLoc, readStoredLoc, writeStoredLoc } from "../lib/storedLocation";
 import RequestChangeModal, { ReportedClinic } from "../components/RequestChangeModal";
 
 function IconStethoscope({ size = 20 }: { size?: number }) {
@@ -71,6 +73,20 @@ function IconHeart({ size = 20 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+    </svg>
+  );
+}
+
+// Chiropractic — spine (same 24-grid / 1.8 stroke style as the set above)
+function IconSpine({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="8.5" y="2.5" width="7" height="3.5" rx="1.5"/>
+      <rect x="8" y="7.5" width="8" height="3.5" rx="1.5"/>
+      <rect x="8" y="12.5" width="8" height="3.5" rx="1.5"/>
+      <rect x="8.5" y="17.5" width="7" height="3.5" rx="1.5"/>
+      <path d="M5.5 9.25h2.5M16 9.25h2.5M5.5 14.25h2.5M16 14.25h2.5"/>
     </svg>
   );
 }
@@ -148,6 +164,7 @@ function getTypeProps(type: Clinic["type"], lang: "en"|"es" = "en") {
     veteran:   { icon: <IconMedal />,       color: "#7A5E00", bg: C.goldL,   label: lang === "en" ? "Veterans Care" : "Veteranos",          pinColor: "#B45309" },
     er:        { icon: <IconAmbulance />,   color: C.iRed,    bg: C.redL,    label: lang === "en" ? "Emergency"     : "Emergencia",         pinColor: "#D80025" },
     uninsured: { icon: <IconHeart />,       color: "#166534", bg: "#DCFCE7", label: lang === "en" ? "No Insurance"  : "Sin Seguro",         pinColor: "#166534" },
+    chiro:     { icon: <IconSpine />,       color: "#0F766E", bg: "#CCFBF1", label: lang === "en" ? "Chiropractic"  : "Quiropractico",      pinColor: "#0F766E" },
   };
   return map[type];
 }
@@ -222,7 +239,7 @@ function LiteClinicCard({ clinic, lang, onClick, onReport }: {
       </div>
       <div style={{ fontFamily: F.body, fontSize: 13, color: C.t3, marginBottom: 6 }}>
         {tp.label} · {clinic.distance} {lang === "en" ? "away" : "de distancia"}
-        {clinic.open ? (lang === "en" ? " · Open" : " · Abierto") : (lang === "en" ? " · Closed" : " · Cerrado")}
+        {clinic.open === false ? (lang === "en" ? " · Temporarily Closed" : " · Cerrado Temporalmente") : ""}
         {clinic.sliding ? (lang === "en" ? " · Sliding Scale" : " · Escala Movil") : ""}
       </div>
       <div style={{ fontFamily: F.body, fontSize: 13, color: C.t2, marginBottom: 10 }}>
@@ -287,7 +304,7 @@ function GoogleMap({ clinics, isMobile, onSelectClinic, selectedId, centerLat, c
             <div style="font-size:12px;color:#5A6A8A;margin-bottom:6px;">${clinic.address}</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               <span style="font-size:11px;font-weight:500;color:${tp.color};background:${tp.bg};padding:2px 8px;border-radius:4px;">${tp.label}</span>
-              <span style="font-size:11px;font-weight:500;color:${clinic.open ? "#166534" : "#6B7280"};background:${clinic.open ? "#DCFCE7" : "#F3F4F6"};padding:2px 8px;border-radius:4px;">${clinic.open ? "Open Now" : "Closed"}</span>
+              ${clinic.open === false ? `<span style="font-size:11px;font-weight:500;color:#6B7280;background:#F3F4F6;padding:2px 8px;border-radius:4px;">Temporarily Closed</span>` : ""}
             </div>
             <div style="margin-top:8px;font-size:12px;font-weight:600;color:#0A1F62;">${clinic.distance} away</div>
           </div>`,
@@ -361,12 +378,13 @@ function MiniCard({ clinic, isMobile, lang, onClick, selected }: {
           color: tp.color, background: tp.bg, padding: "2px 8px", borderRadius: 4 }}>
           {tp.label}
         </span>
-        <span style={{ fontSize: 11, fontFamily: F.body, fontWeight: 500,
-          color: clinic.open ? "#166534" : C.t3,
-          background: clinic.open ? "#DCFCE7" : "#F3F4F6",
-          padding: "2px 8px", borderRadius: 4 }}>
-          {clinic.open ? (lang === "en" ? "Open" : "Abierto") : (lang === "en" ? "Closed" : "Cerrado")}
-        </span>
+        {clinic.open === false && (
+          <span style={{ fontSize: 11, fontFamily: F.body, fontWeight: 500,
+            color: C.t3, background: "#F3F4F6",
+            padding: "2px 8px", borderRadius: 4 }}>
+            {lang === "en" ? "Temporarily Closed" : "Cerrado Temporalmente"}
+          </span>
+        )}
         {clinic.telehealth && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
             fontSize: 11, fontFamily: F.body, fontWeight: 500,
@@ -421,12 +439,14 @@ function ClinicCard({ clinic, isMobile, lang, onClick, onReport }: {
                 color: tp.color, background: tp.bg, padding: "3px 10px", borderRadius: 4 }}>
                 {tp.label}
               </span>
-              <span style={{ fontSize: 12, fontFamily: F.body, fontWeight: 500,
-                color: clinic.open ? "#166534" : C.t3,
-                background: clinic.open ? "#DCFCE7" : "#F3F4F6",
-                padding: "3px 10px", borderRadius: 4 }}>
-                {clinic.open ? (lang === "en" ? "Open Now" : "Abierto") : (lang === "en" ? "Closed" : "Cerrado")}
-              </span>
+              {/* No hours data in any source → only show when known closed */}
+              {clinic.open === false && (
+                <span style={{ fontSize: 12, fontFamily: F.body, fontWeight: 500,
+                  color: C.t3, background: "#F3F4F6",
+                  padding: "3px 10px", borderRadius: 4 }}>
+                  {lang === "en" ? "Temporarily Closed" : "Cerrado Temporalmente"}
+                </span>
+              )}
               {clinic.telehealth && (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
                   fontSize: 12, fontFamily: F.body, fontWeight: 500,
@@ -469,6 +489,11 @@ function ClinicCard({ clinic, isMobile, lang, onClick, onReport }: {
           </span>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 16 }}>
+          {clinic.insurance.length === 0 && (
+            <span style={{ fontFamily: F.body, fontSize: 13, color: C.t3 }}>
+              {lang === "en" ? "Call to ask about insurance" : "Llame para preguntar sobre su seguro"}
+            </span>
+          )}
           {clinic.insurance.slice(0, isMobile ? 3 : 5).map(ins => (
             <span key={ins} style={{ fontFamily: F.body, fontSize: 12,
               color: C.iBlue, background: C.iWhite,
@@ -505,11 +530,86 @@ function ClinicCard({ clinic, isMobile, lang, onClick, onReport }: {
   );
 }
 
+// ── Location helpers ─────────────────────────────────────────────
+// No default city and no device-location prompt. If the user didn't
+// give a city/ZIP, we simply ask for one, geocode it, and show results.
+// The place is remembered for this browser tab (sessionStorage) so
+// tapping another category doesn't ask again.
+type LocStatus = "locating" | "ready" | "need";
+type LocError  = null | "notFound";
+
+// ── Ask-for-location card: one field, one button ────────────────
+function AskLocationCard({ lang, isMobile, lite, error, badPlace, onSubmit }: {
+  lang: "en"|"es"; isMobile: boolean; lite?: boolean;
+  error: LocError; badPlace: string;
+  onSubmit: (text: string) => void;
+}) {
+  const [val, setVal] = useState("");
+  const en = lang === "en";
+  const msg = error === "notFound"
+    ? (en ? `We couldn't find "${badPlace}". Try a city name or ZIP code.`
+          : `No encontramos "${badPlace}". Pruebe con el nombre de una ciudad o un codigo postal.`)
+    : (en ? "Enter your city or ZIP code to see care near you."
+          : "Escriba su ciudad o codigo postal para ver atencion cercana.");
+
+  return (
+    <div style={{ padding: lite ? "12px 18px" : (isMobile ? "20px 18px" : "32px 48px") }}>
+      <div style={{ background: C.iWhite, border: "1.5px solid " + C.border,
+        borderRadius: lite ? 0 : 6, padding: isMobile ? "20px 18px" : "24px 28px",
+        maxWidth: 560, boxSizing: "border-box" }}>
+        <div style={{ fontFamily: F.heading, fontSize: isMobile ? 20 : 24, fontWeight: 700,
+          color: C.iBlue, marginBottom: 8 }}>
+          {en ? "Where are you?" : "Donde esta usted?"}
+        </div>
+        <div role="status" style={{ fontFamily: F.body, fontSize: isMobile ? 14 : 15,
+          color: C.t2, lineHeight: 1.5, marginBottom: 16 }}>
+          {msg}
+        </div>
+        <form onSubmit={e => { e.preventDefault(); if (val.trim()) onSubmit(val.trim()); }}
+          style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10 }}>
+          {/* 16px font so iPhone Safari doesn't zoom the page on focus */}
+          <input type="text" value={val} onChange={e => setVal(e.target.value)} autoFocus
+            enterKeyHint="search"
+            aria-label={en ? "City or ZIP code" : "Ciudad o codigo postal"}
+            placeholder={en ? "City or ZIP code" : "Ciudad o codigo postal"}
+            style={{ flex: 1, minWidth: 0, boxSizing: "border-box", minHeight: 52, padding: "0 16px",
+              fontSize: 16, fontFamily: F.body, color: C.t2, background: C.card,
+              border: "1px solid " + C.border, borderRadius: 4, outline: "none" }} />
+          <button type="submit"
+            style={{ minHeight: 52, padding: "12px 24px", borderRadius: 4,
+              background: C.iBlue, color: C.iWhite, border: "none", cursor: "pointer",
+              fontFamily: F.heading, fontSize: 16, fontWeight: 700, letterSpacing: "0.02em" }}>
+            {en ? "Find Care" : "Buscar Atencion"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Coverage reminder — gold notice style (same as the Lite Mode banner) so
+// it stands out from the grey helper text without looking like an alert.
+function CoverageNote({ lang, isMobile }: { lang: "en"|"es"; isMobile: boolean }) {
+  return (
+    <div style={{ background: C.goldL, borderLeft: "3px solid " + C.gold, borderRadius: 4,
+      padding: "10px 12px", marginBottom: isMobile ? 16 : 20,
+      fontFamily: F.body, fontSize: isMobile ? 13 : 14, fontWeight: 500,
+      color: "#7A5E00", lineHeight: 1.5 }}>
+      {lang === "en"
+        ? "Coverage can change. Call your insurance or the provider to confirm before you go."
+        : "La cobertura puede cambiar. Llame a su seguro o al proveedor para confirmar antes de ir."}
+    </div>
+  );
+}
+
+// Same list (and order) as the home page buttons — see lib/constants.
+const RESULTS_CATEGORIES = CATEGORIES;
+
 // ── Results Inner ────────────────────────────────────────────────
 function ResultsInner() {
   const router    = useRouter();
   const params    = useSearchParams();
-  const query     = params.get("q") ?? "";
+  const query     = params.get("q") ?? "";          // a place ("Clinton, Iowa", "52761, Iowa")
   const catParam  = params.get("cat") ?? "";
   const langParam = (params.get("lang") ?? "en") as "en" | "es";
 
@@ -524,9 +624,10 @@ function ResultsInner() {
   const [allClinics, setAllClinics]       = useState<Clinic[]>([]);
   const [loading, setLoading]             = useState(true);
   const [apiError, setApiError]           = useState(false);
-  const [centerLat, setCenterLat]         = useState(41.4245);
-  const [centerLng, setCenterLng]         = useState(-91.0432);
-  const [locationLabel, setLocationLabel] = useState("Muscatine, IA");
+  const [coords, setCoords]               = useState<{ lat: number; lng: number } | null>(null);
+  const [locationLabel, setLocationLabel] = useState("");
+  const [locStatus, setLocStatus]         = useState<LocStatus>("locating");
+  const [locError, setLocError]           = useState<LocError>(null);
 
   // ── Lite Mode state ───────────────────────────────────────────
   // Auto-detects slow connections; user can also toggle manually
@@ -569,84 +670,143 @@ function ResultsInner() {
     localStorage.setItem("rrLiteMode", liteMode ? "true" : "false");
   }, [liteMode]);
 
-  // ── Fetch real clinics ─────────────────────────────────────────
+  // ── 1. Resolve location (no default city) ─────────────────────
   useEffect(() => {
+    let cancelled = false;
+
+    function apply(loc: StoredLoc) {
+      setCoords({ lat: loc.lat, lng: loc.lng });
+      setLocationLabel(loc.label);
+      setLocStatus("ready");
+    }
+    function needLocation(err: LocError) {
+      setCoords(null);
+      setLocError(err);
+      setLocStatus("need");
+      setLoading(false);
+    }
+
+    async function resolve() {
+      setCoords(null);
+      setLocError(null);
+      setApiError(false);
+      setLocStatus("locating");
+      setLoading(true);
+
+      const parsed = query ? parseSearch(query) : null;
+      const place  = parsed?.place ?? null;
+
+      // a. Typed place → geocode it
+      if (place) {
+        try {
+          const res = await fetch(`/api/geocode?address=${encodeURIComponent(place)}`);
+          const g   = await res.json();
+          if (cancelled) return;
+          if (res.ok && typeof g.lat === "number") {
+            const loc: StoredLoc = { lat: g.lat, lng: g.lng,
+              label: g.formattedAddress || place.replace(/,\s*iowa$/i, "") };
+            writeStoredLoc(loc);
+            apply(loc);
+          } else if (res.ok && g.notFound) {
+            needLocation("notFound");
+          } else {
+            setApiError(true); setLoading(false);
+          }
+        } catch {
+          if (!cancelled) { setApiError(true); setLoading(false); }
+        }
+        return;
+      }
+
+      // b. City already given earlier in this tab → reuse it
+      const stored = readStoredLoc();
+      if (stored) { apply(stored); return; }
+
+      // c. Otherwise just ask for city or ZIP
+      needLocation(null);
+    }
+
+    resolve();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  // ── 2. Fetch clinics once we have a location ──────────────────
+  useEffect(() => {
+    if (!coords) return;
+    let cancelled = false;
     async function loadClinics() {
       setLoading(true);
       setApiError(false);
       try {
-        // Extract a clean location from the query before geocoding.
-        // e.g. "show me options in Quad Cities area" → "Davenport, Iowa"
-        // e.g. "clinton" → "Clinton, Iowa"
-        // Falls back to normalizeLocation which at minimum appends Iowa.
-        const locationForGeo = query
-          ? (extractLocation(query) || normalizeLocation(query))
-          : "Muscatine, Iowa";
-
-        const geoRes  = await fetch(`/api/geocode?address=${encodeURIComponent(locationForGeo)}`);
-        const geoData = await geoRes.json();
-        const lat = geoData.lat || 41.4245;
-        const lng = geoData.lng || -91.0432;
-        setCenterLat(lat);
-        setCenterLng(lng);
-        // Only update location label if result was not vague
-        if (geoData.formattedAddress && !geoData.vague) {
-          setLocationLabel(geoData.formattedAddress);
-        } else if (geoData.vague) {
-          // Show the cleaned location string, not "Iowa, USA"
-          setLocationLabel(locationForGeo);
-        }
-
-        const catQueryMap: Record<string, string> = {
-          family:    "doctor primary family",
-          mental:    "mental health counseling",
-          dental:    "dental dentist",
-          veteran:   "veteran va military",
-          er:        "emergency hospital urgent",
-          uninsured: "uninsured sliding scale",
-        };
-        const apiQuery = catParam ? catQueryMap[catParam] || "" : query;
-        const clinicsRes  = await fetch(`/api/clinics?lat=${lat}&lng=${lng}&query=${encodeURIComponent(apiQuery)}`);
+        const qs = new URLSearchParams({ lat: String(coords!.lat), lng: String(coords!.lng) });
+        if (catParam) qs.set("cat", catParam);
+        else if (query) qs.set("query", query);   // older links may still carry care words in q
+        const clinicsRes  = await fetch(`/api/clinics?${qs.toString()}`);
+        if (!clinicsRes.ok) throw new Error(String(clinicsRes.status));
         const clinicsData = await clinicsRes.json();
-
-        if (clinicsData.clinics?.length) {
-          setAllClinics(clinicsData.clinics);
-        } else {
-          setAllClinics([]);
-        }
+        if (cancelled) return;
+        setAllClinics(clinicsData.clinics?.length ? clinicsData.clinics : []);
       } catch (err) {
+        if (cancelled) return;
         console.error("Failed to load clinics:", err);
         setApiError(true);
         setAllClinics([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     loadClinics();
-  }, [query, catParam]);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coords, catParam]);
+
+  // ── Search box: split "what" from "where" ─────────────────────
+  // "local therapists"  → Mental Health, keep current city
+  // "dentist clinton"   → Dental in Clinton
+  // "Clinton"           → current category in Clinton
+  // "doctor near me"    → Family Care, current city (or ask for one)
+  function submitSearch(text: string) {
+    const t = text.trim();
+    if (!t) return;
+    const { care, place } = parseSearch(t);
+    const p = new URLSearchParams({ lang });
+    const cat = care ?? catParam;
+    if (cat) p.set("cat", cat);
+    if (place)      p.set("q", place);
+    else if (query) p.set("q", query);
+    router.push(`/results?${p.toString()}`);
+  }
+
+  // From the ask-location card: the text is a place, even a single word
+  function submitPlace(text: string) {
+    const { care, place } = parseSearch(text);
+    const p = new URLSearchParams({ lang });
+    const cat = care ?? catParam;
+    if (cat) p.set("cat", cat);
+    p.set("q", place ?? normalizeLocation(text));
+    router.push(`/results?${p.toString()}`);
+  }
+
+  // "Change" link next to the location label
+  function changeLocation() {
+    setLocError(null);
+    setLocStatus("need");
+  }
+
+  const badPlace = query.replace(/,\s*iowa$/i, "");
 
   const { voiceState, start: startVoice } = useVoice(
     lang,
     (text) => setSearchQuery(text),
-    (text) => {
-      // Extract location from full spoken transcript before routing.
-      // e.g. "show me options in Quad Cities area" → q=Davenport, Iowa
-      // Falls back to normalizeLocation (appends Iowa) if no pattern match.
-      const loc = extractLocation(text) || normalizeLocation(text);
-      router.push(`/results?q=${encodeURIComponent(loc)}&lang=${lang}`);
-    }
+    (text) => submitSearch(text)   // same "what + where" split as typing
   );
 
   function navToCategory(cat: string) {
-    const locationQuery = query
-      .replace(/\b(doctor|primary|family|medicaid|mental|health|counseling|dental|dentist|veteran|va|military|emergency|hospital|urgent|uninsured|sliding|scale|free|clinic|care|near|in|around)\b/gi, "")
-      .replace(/\s+/g, " ").trim() || query;
-
-    if (cat === "") {
-      router.push(`/results?q=${encodeURIComponent(locationQuery)}&lang=${lang}`);
-    } else {
-      router.push(`/results?q=${encodeURIComponent(locationQuery)}&cat=${cat}&lang=${lang}`);
-    }
+    const p = new URLSearchParams({ lang });
+    if (cat)   p.set("cat", cat);
+    if (query) p.set("q", query);
+    router.push(`/results?${p.toString()}`);
   }
 
   const filtered = allClinics.filter(c => {
@@ -710,7 +870,7 @@ function ResultsInner() {
               whiteSpace: "nowrap", minHeight: 40 }}>
             {lang === "en" ? "All" : "Todo"}
           </button>
-          {CATEGORIES.map(cat => (
+          {RESULTS_CATEGORIES.map(cat => (
             <button key={cat.id} onClick={() => navToCategory(cat.id)}
               style={{ padding: "7px 12px",
                 border: "1px solid " + (catParam === cat.id ? C.iBlue : C.border),
@@ -727,6 +887,11 @@ function ResultsInner() {
         <div style={{ padding: "12px 18px" }}>
           {loading && <LiteLoadingSkeleton />}
 
+          {locStatus === "need" && !loading && (
+            <AskLocationCard lang={lang} isMobile lite error={locError} badPlace={badPlace}
+              onSubmit={submitPlace} />
+          )}
+
           {apiError && !loading && (
             <div style={{ fontFamily: F.body, fontSize: 15, color: C.t3, padding: "20px 0" }}>
               {lang === "en" ? "Could not load. " : "No se pudo cargar. "}
@@ -739,11 +904,19 @@ function ResultsInner() {
             </div>
           )}
 
-          {!loading && !apiError && (
+          {!loading && !apiError && locStatus === "ready" && (
             <>
-              <div style={{ fontFamily: F.body, fontSize: 13, color: C.t3, marginBottom: 12 }}>
+              <div style={{ fontFamily: F.body, fontSize: 13, color: C.t3, marginBottom: 4 }}>
                 {filtered.length} {lang === "en" ? "results near" : "resultados cerca de"} {locationLabel}
+                {" · "}
+                <button onClick={changeLocation}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+                    fontFamily: F.body, fontSize: 13, fontWeight: 600, color: C.iBlue,
+                    textDecoration: "underline" }}>
+                  {lang === "en" ? "Change" : "Cambiar"}
+                </button>
               </div>
+              <div style={{ marginTop: 8 }}><CoverageNote lang={lang} isMobile /></div>
               {filtered.map(clinic => (
                 <LiteClinicCard key={clinic.id} clinic={clinic} lang={lang}
                   onClick={() => {
@@ -845,10 +1018,7 @@ function ResultsInner() {
               : searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => {
-              if (e.key === "Enter" && searchQuery.trim()) {
-                const loc = extractLocation(searchQuery) || normalizeLocation(searchQuery);
-                router.push(`/results?q=${encodeURIComponent(loc)}&lang=${lang}`);
-              }
+              if (e.key === "Enter" && searchQuery.trim()) submitSearch(searchQuery);
             }}
             placeholder={lang === "en" ? "Search for care near you..." : "Buscar atencion..."}
             readOnly={voiceState === "listening"}
@@ -866,8 +1036,7 @@ function ResultsInner() {
         <button
           onClick={() => {
             if (searchQuery.trim()) {
-              const loc = extractLocation(searchQuery) || normalizeLocation(searchQuery);
-              router.push(`/results?q=${encodeURIComponent(loc)}&lang=${lang}`);
+              submitSearch(searchQuery);
             } else {
               router.push(`/?lang=${lang}`);
             }
@@ -897,7 +1066,7 @@ function ResultsInner() {
           {lang === "en" ? "All Care" : "Todo"}
         </button>
 
-        {CATEGORIES.map(cat => {
+        {RESULTS_CATEGORIES.map(cat => {
           const isActive = catParam === cat.id;
           const isVet    = cat.id === "veteran";
           return (
@@ -962,15 +1131,30 @@ function ResultsInner() {
         </div>
       )}
 
+      {/* ASK FOR LOCATION — no default city */}
+      {locStatus === "need" && !loading && (
+        <AskLocationCard lang={lang} isMobile={isMobile} error={locError} badPlace={badPlace}
+          onSubmit={submitPlace} />
+      )}
+
       {/* LIST VIEW */}
-      {viewMode === "list" && !loading && !apiError && (
+      {viewMode === "list" && !loading && !apiError && locStatus === "ready" && (
         <div style={{ padding: isMobile ? "20px 18px" : "32px 48px" }}>
           <div style={{ fontFamily: F.body, fontSize: isMobile ? 14 : 16,
-            color: C.t3, marginBottom: 20, fontWeight: 500 }}>
+            color: C.t3, marginBottom: 6, fontWeight: 500 }}>
             {filtered.length === 0
-              ? (lang === "en" ? "No results found." : "Sin resultados.")
-              : `${filtered.length} ${lang === "en" ? "care options found near you" : "opciones encontradas"}`}
+              ? (lang === "en" ? "No results found near " : "Sin resultados cerca de ")
+              : `${filtered.length} ${lang === "en" ? "care options near" : "opciones cerca de"} `}
+            {locationLabel}
+            {" · "}
+            <button onClick={changeLocation}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+                fontFamily: F.body, fontSize: isMobile ? 14 : 16, fontWeight: 600, color: C.iBlue,
+                textDecoration: "underline" }}>
+              {lang === "en" ? "Change" : "Cambiar"}
+            </button>
           </div>
+          <div style={{ marginTop: 10 }}><CoverageNote lang={lang} isMobile={isMobile} /></div>
           <div style={{ display: "grid",
             gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)",
             gap: isMobile ? 16 : 20 }}>
@@ -1000,7 +1184,7 @@ function ResultsInner() {
       )}
 
       {/* MAP VIEW */}
-      {viewMode === "map" && !loading && (
+      {viewMode === "map" && !loading && coords && locStatus === "ready" && (
         <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row",
           height: isMobile ? "auto" : "calc(100vh - 200px)" }}>
           <div style={{ width: isMobile ? "100%" : 320, flexShrink: 0,
@@ -1026,7 +1210,7 @@ function ResultsInner() {
               clinics={filtered} isMobile={isMobile}
               selectedId={selectedClinic?.id ?? null}
               onSelectClinic={clinic => setSelectedClinic(clinic)}
-              centerLat={centerLat} centerLng={centerLng}
+              centerLat={coords.lat} centerLng={coords.lng}
             />
             <div style={{ position: "absolute", bottom: isMobile ? "auto" : 100,
               right: isMobile ? "auto" : 60,
@@ -1044,6 +1228,7 @@ function ResultsInner() {
                 { color: "#6B21A8", label: lang === "en" ? "Dental"        : "Dental" },
                 { color: "#B45309", label: lang === "en" ? "Veterans"      : "Veteranos" },
                 { color: "#D80025", label: lang === "en" ? "Emergency"     : "Emergencia" },
+                { color: "#0F766E", label: lang === "en" ? "Chiropractic"  : "Quiropractico" },
               ].map(item => (
                 <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
                   <div style={{ width: 12, height: 12, borderRadius: "50%",

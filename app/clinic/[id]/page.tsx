@@ -83,6 +83,7 @@ function getTypeProps(type: Clinic["type"], lang: "en"|"es" = "en") {
     veteran:   { color: "#7A5E00", bg: C.goldL,   label: lang === "en" ? "Veterans Care" : "Veteranos"         },
     er:        { color: C.iRed,    bg: C.redL,    label: lang === "en" ? "Emergency"     : "Emergencia"        },
     uninsured: { color: "#166534", bg: "#DCFCE7", label: lang === "en" ? "No Insurance"  : "Sin Seguro"        },
+    chiro:     { color: "#0F766E", bg: "#CCFBF1", label: lang === "en" ? "Chiropractic"  : "Quiropractico"     },
   };
   return map[type];
 }
@@ -260,14 +261,15 @@ function ClinicDetailInner() {
                 padding: "4px 12px", borderRadius: 4 }}>
                 {tp.label}
               </span>
-              <span style={{ fontSize: 13, fontFamily: F.body, fontWeight: 500,
-                color: clinic.open ? "#166534" : C.t3,
-                background: clinic.open ? "#DCFCE7" : "#F3F4F6",
-                padding: "4px 12px", borderRadius: 4 }}>
-                {clinic.open
-                  ? (lang === "en" ? "Open Now" : "Abierto Ahora")
-                  : (lang === "en" ? "Closed"   : "Cerrado")}
-              </span>
+              {/* Only shown when the source says the site is closed — we have
+                  no hours data, so we never claim "Open Now". */}
+              {clinic.open === false && (
+                <span style={{ fontSize: 13, fontFamily: F.body, fontWeight: 500,
+                  color: C.t3, background: "#F3F4F6",
+                  padding: "4px 12px", borderRadius: 4 }}>
+                  {lang === "en" ? "Temporarily Closed" : "Cerrado Temporalmente"}
+                </span>
+              )}
               {clinic.telehealth && (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 5,
                   fontSize: 13, fontFamily: F.body, fontWeight: 500,
@@ -374,11 +376,16 @@ function ClinicDetailInner() {
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <span style={{ color: C.iBlue }}><IconClock /></span>
                 <div>
+                  {/* No source we use publishes hours — don't invent them. */}
                   <div style={{ fontFamily: F.body, fontSize: isMobile ? 15 : 16, color: C.t2 }}>
-                    {lang === "en" ? "Monday - Friday: 8:00 AM - 5:00 PM" : "Lunes - Viernes: 8:00 AM - 5:00 PM"}
+                    {clinic.type === "er"
+                      ? (lang === "en" ? "Emergency departments are typically open 24 hours." : "Las salas de emergencia normalmente abren las 24 horas.")
+                      : (lang === "en" ? "Call ahead to confirm hours." : "Llame antes para confirmar el horario.")}
                   </div>
                   <div style={{ fontFamily: F.body, fontSize: isMobile ? 13 : 14, color: C.t3, marginTop: 4 }}>
-                    {lang === "en" ? "Saturday: 9:00 AM - 12:00 PM  Sunday: Closed" : "Sabado: 9:00 AM - 12:00 PM  Domingo: Cerrado"}
+                    {clinic.type === "er"
+                      ? (lang === "en" ? "In an emergency, call 911." : "En una emergencia, llame al 911.")
+                      : (lang === "en" ? "Hours are not listed in our data sources." : "El horario no aparece en nuestras fuentes de datos.")}
                   </div>
                 </div>
               </div>
@@ -432,6 +439,11 @@ function ClinicDetailInner() {
                 color: C.t3, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
                 {lang === "en" ? "Accepted Insurance" : "Seguro Aceptado"}
               </div>
+              {clinic.insurance.length === 0 && (
+                <div style={{ fontFamily: F.body, fontSize: isMobile ? 14 : 15, color: C.t2, lineHeight: 1.6 }}>
+                  {lang === "en" ? "Call to ask about insurance." : "Llame para preguntar sobre su seguro."}
+                </div>
+              )}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {clinic.insurance.map(ins => (
                   <span key={translateInsurance(ins, lang)} style={{ display: "inline-flex", alignItems: "center", gap: 6,
@@ -460,13 +472,13 @@ function ClinicDetailInner() {
               </div>
             )}
 
-            <div style={{ background: C.card, borderRadius: 6,
-              border: "1px solid " + C.border, padding: "16px 20px" }}>
-              <div style={{ fontFamily: F.body, fontSize: isMobile ? 13 : 14,
-                color: C.t3, lineHeight: 1.7 }}>
+            <div style={{ background: C.goldL, borderRadius: 4,
+              borderLeft: "3px solid " + C.gold, padding: "12px 16px" }}>
+              <div style={{ fontFamily: F.body, fontSize: isMobile ? 13 : 14, fontWeight: 500,
+                color: "#7A5E00", lineHeight: 1.6 }}>
                 {lang === "en"
-                  ? "Insurance coverage may vary. We recommend calling the clinic ahead of your visit to confirm your specific plan is accepted."
-                  : "La cobertura del seguro puede variar. Recomendamos llamar a la clinica antes de su visita para confirmar que su plan especifico es aceptado."}
+                  ? "Coverage can change. Call your insurance or this provider to confirm before you go."
+                  : "La cobertura puede cambiar. Llame a su seguro o a este proveedor para confirmar antes de ir."}
               </div>
             </div>
           </div>

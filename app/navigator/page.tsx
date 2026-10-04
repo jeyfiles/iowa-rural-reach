@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { COLORS as C, FONTS as F } from "../lib/constants";
 import { useVoice } from "../lib/useVoice";
 import { VoiceButton } from "../lib/VoiceButton";
+import { parseSearch, detectCare } from "../lib/careIntent";
+import { readStoredLoc, writeStoredLoc } from "../lib/storedLocation";
 
 interface Message {
   role: "user" | "ai";
@@ -76,39 +78,13 @@ const SUGGESTIONS_ES = [
 // ── Extract category and location from AI response ───────────────
 // Used to build the context-aware Show Results URL
 function buildResultsUrl(userMessage: string, lang: "en"|"es"): string {
-  const msg = userMessage.toLowerCase();
-
-  // Detect category from user message
-  let cat = "";
-  if (/veteran|va\b|military|vets/i.test(msg))                           cat = "veteran";
-  else if (/mental|counsel|depress|anxiety|ptsd|substance|alcohol/i.test(msg)) cat = "mental";
-  else if (/dental|dentist|tooth|teeth/i.test(msg))                      cat = "dental";
-  else if (/emergency|er\b|urgent|hospital|chest pain/i.test(msg))       cat = "er";
-  else if (/uninsured|no insurance|sliding|free clinic|afford/i.test(msg)) cat = "uninsured";
-  else if (/doctor|primary|family|medicaid|checkup/i.test(msg))           cat = "family";
-
-  // Extract location from user message
-  const patterns = [
-    /(?:near|in|around|close to|from)\s+([A-Za-z][a-zA-Z\s]+?)(?:\s*[,.]|$)/i,
-    /([A-Za-z][a-zA-Z\s]+),?\s*Iowa/i,
-  ];
-  const falsePositives = ["i", "a", "the", "my", "me", "we", "us", "help", "care", "need", "want", "iowa"];
-  let location = "";
-  for (const p of patterns) {
-    const m = userMessage.match(p);
-    if (m?.[1]) {
-      const loc = m[1].trim();
-      if (!falsePositives.includes(loc.toLowerCase())) {
-        location = loc;
-        break;
-      }
-    }
-  }
-
-  // Build URL
+  // Shared with results page / chat / clinics API — see lib/careIntent.ts.
+  // No place in the message (or "near me") → no q param; the results page
+  // then uses the device location or asks the user, never a default city.
+  const { care, place } = parseSearch(userMessage, true);
   const params = new URLSearchParams({ lang });
-  if (cat) params.set("cat", cat);
-  if (location) params.set("q", location);
+  if (care)  params.set("cat", care);
+  if (place) params.set("q", place);
   return `/results?${params.toString()}`;
 }
 
@@ -174,8 +150,19 @@ function NavigatorInner() {
   async function sendMessage(text: string) {
     if (!text.trim() || loading) return;
 
-    // Build the results URL from the user message for the Show Results button
-    const resultsUrl = buildResultsUrl(text, lang);
+    // Fallback Show Results link (used if the API doesn't resolve a location).
+    // Care type looks back through earlier messages too, so "waukee" after
+    // "chiros near me" still opens Chiropractic.
+    let resultsUrl = buildResultsUrl(text, lang);
+    if (!parseSearch(text, true).care) {
+      const earlier = [...messages].reverse().find(m => m.role === "user" && detectCare(m.text));
+      const cat = earlier ? detectCare(earlier.text) : null;
+      if (cat) {
+        const u = new URL(resultsUrl, "http://x");
+        u.searchParams.set("cat", cat);
+        resultsUrl = `/results?${u.searchParams.toString()}`;
+      }
+    }
 
     const userMsg: Message    = { role: "user", text: text.trim() };
     const loadingMsg: Message = { role: "ai", text: "", loading: true };
@@ -189,9 +176,20 @@ function NavigatorInner() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text.trim(), history }),
+        // knownLocation = city already chosen in this tab (results page or
+        // earlier in this chat) so "near me" doesn't ask again
+        body: JSON.stringify({ message: text.trim(), history, knownLocation: readStoredLoc() }),
       });
       const data = await res.json();
+
+      // Remember the city the chat used, and point Show Results at it.
+      // No q param needed: the results page reads the remembered city.
+      if (data.resolved && typeof data.resolved.lat === "number") {
+        writeStoredLoc({ lat: data.resolved.lat, lng: data.resolved.lng, label: data.resolved.label });
+        const p = new URLSearchParams({ lang });
+        if (data.resolved.cat) p.set("cat", data.resolved.cat);
+        resultsUrl = `/results?${p.toString()}`;
+      }
       const aiText = data.text ?? (lang === "en"
         ? "I am sorry, something went wrong. Please try again."
         : "Lo siento, algo salio mal. Por favor intente de nuevo.");

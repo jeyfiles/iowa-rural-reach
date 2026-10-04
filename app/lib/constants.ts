@@ -39,5 +39,6 @@ export const CATEGORIES = [
   { id: "veteran",   label: "Veterans Care", labelEs: "Veteranos"         },
   { id: "er",        label: "Emergency",     labelEs: "Emergencia"        },
   { id: "dental",    label: "Dental",        labelEs: "Dental"            },
+  { id: "chiro",     label: "Chiropractic",  labelEs: "Quiropráctico"     },
   { id: "uninsured", label: "No Insurance",  labelEs: "Sin Seguro"        },
 ];

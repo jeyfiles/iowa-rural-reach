@@ -26,6 +26,10 @@ export const LOCATION_ALIASES: Record<string, string> = {
   "sioux city area":   "Sioux City, Iowa",
 };
 
+function aliasRe(alias: string): RegExp {
+  return new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+}
+
 // ── Normalize a raw location string ─────────────────────────────
 // Resolves aliases, appends Iowa if missing.
 export function normalizeLocation(raw: string): string {
@@ -34,9 +38,11 @@ export function normalizeLocation(raw: string): string {
   // Check alias map first
   if (LOCATION_ALIASES[lower]) return LOCATION_ALIASES[lower];
 
-  // Partial alias match (e.g. "quad cities iowa" still maps to Davenport)
+  // Partial alias match (e.g. "quad cities iowa" still maps to Davenport).
+  // Whole words only — a plain substring check made "clinic", "physical"
+  // and "medicaid" (all contain "ic") resolve to Iowa City.
   for (const [alias, canonical] of Object.entries(LOCATION_ALIASES)) {
-    if (lower.includes(alias)) return canonical;
+    if (aliasRe(alias).test(lower)) return canonical;
   }
 
   // Append Iowa if not already present
@@ -58,7 +64,7 @@ export function extractLocation(msg: string): string | null {
   // Check full message against alias map first (handles "quad cities" before pattern matching)
   const lower = msg.trim().toLowerCase();
   for (const [alias, canonical] of Object.entries(LOCATION_ALIASES)) {
-    if (lower.includes(alias)) return canonical;
+    if (aliasRe(alias).test(lower)) return canonical;
   }
 
   const patterns = [

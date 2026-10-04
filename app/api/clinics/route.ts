@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isExcludedAddress } from "../../lib/exclusions";
+import { detectCare, CareCategory } from "../../lib/careIntent";
 
 // ── Types ────────────────────────────────────────────────────────
 interface ClinicResult {
@@ -8,8 +9,10 @@ interface ClinicResult {
   address:    string;
   phone:      string;
   distance:   string;
-  open:       boolean;
-  type:       "family" | "mental" | "dental" | "veteran" | "er" | "uninsured";
+  // true/false only when the source actually tells us; null = unknown
+  // (no hours data) → UI shows no Open badge rather than guessing.
+  open:       boolean | null;
+  type:       "family" | "mental" | "dental" | "veteran" | "er" | "uninsured" | "chiro";
   insurance:  string[];
   services:   string[];
   telehealth: boolean;
@@ -83,7 +86,8 @@ async function fetchFQHCs(lat: number, lng: number): Promise<ClinicResult[]> {
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) return [];
 
-    return data.slice(0, 30).map((r: any, i: number) => {
+    // EndDt set = HRSA says this site has closed → drop it entirely.
+    return data.filter((r: any) => r.EndDt == null).slice(0, 30).map((r: any, i: number) => {
       const rLat = typeof r.Latitude  === "number" ? r.Latitude  : lat;
       const rLng = typeof r.Longitude === "number" ? r.Longitude : lng;
       const dist = typeof r.Distance === "number"
@@ -96,7 +100,7 @@ async function fetchFQHCs(lat: number, lng: number): Promise<ClinicResult[]> {
         address:   [r.CtrAddress, r.CtrCity, r.CtrStateAbbr, r.CtrZipCd].filter(Boolean).join(", "),
         phone:     formatPhone(r.CtrPhoneNum || ""),
         distance:  dist,
-        open:      r.EndDt == null,
+        open:      null,
         type:      "family" as const,
         insurance: ["Medicaid", "Medicare", "Uninsured OK", "Sliding Scale"],
         services:  ["Primary Care", "Preventive Care", "Immunizations"],
@@ -145,14 +149,13 @@ async function fetchMentalHealth(lat: number, lng: number): Promise<ClinicResult
         address:   `${r.street1 || ""}, ${r.city || ""}, ${r.state || "IA"} ${r.zip || ""}`.trim(),
         phone:     formatPhone(r.phone || ""),
         distance:  calcDistance(lat, lng, rLat, rLng),
-        open:      true,
+        open:      null,
         type:      "mental" as const,
         insurance: [
           ...(r.paymentOptions?.includes("MD") ? ["Medicaid"] : []),
           ...(r.paymentOptions?.includes("MI") ? ["Medicare"] : []),
           ...(r.paymentOptions?.includes("SF") ? ["Sliding Scale"] : []),
-          "Self Pay",
-        ].filter(Boolean),
+        ],
         services: [
           "Mental Health Counseling",
           ...(r.services?.includes("MH") ? ["Psychiatric Services"] : []),
@@ -211,9 +214,11 @@ async function fetchVAFacilities(lat: number, lng: number): Promise<ClinicResult
         ].filter(Boolean).join(", "),
         phone:     formatPhone(attr.phone?.main || ""),
         distance:  calcDistance(lat, lng, fLat, fLng),
-        open:      attr.operatingStatus?.code === "NORMAL",
+        open:      attr.operatingStatus?.code === "CLOSED" ? false : null,
         type:      "veteran" as const,
-        insurance: ["VA Benefits", "Medicare", "Tricare"],
+        // Source doesn't list payers; VA generally can't bill Medicare and
+        // Tricare acceptance varies by facility — so only VA Benefits.
+        insurance: ["VA Benefits"],
         services:  [
           "Veterans Primary Care",
           ...(attr.services?.health?.map((s: any) => s.name) || []).slice(0, 4),
@@ -265,9 +270,11 @@ async function fetchERs(lat: number, lng: number): Promise<ClinicResult[]> {
       address:   h.address,
       phone:     h.phone,
       distance:  calcDistance(lat, lng, h.lat, h.lng),
-      open:      true,
+      open:      null,
       type:      "er" as const,
-      insurance: ["Medicaid", "Medicare", "Most Insurance", "Emergency — all patients treated"],
+      // Federal law (EMTALA) requires ERs to screen/stabilize regardless of
+      // ability to pay. Payer list isn't in our data, so nothing else shown.
+      insurance: ["Emergency — all patients treated"],
       services:  ["Emergency Care", "Urgent Care", "Trauma"],
       telehealth: false,
       sliding:   false,
@@ -283,11 +290,38 @@ async function fetchERs(lat: number, lng: number): Promise<ClinicResult[]> {
     .slice(0, 10);
 }
 
-// ── 5. NPI Registry — Dental providers ──────────────────────────
-// KEY FIX: Use city center coordinates directly — no Math.random()
-// This ensures AI first result matches results page first result
-// Also prefer organization_name, then "Dr. LastName" format for solo practitioners
-async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
+// ── 5. NPI Registry — Dental + Chiropractic providers ───────────
+// Shared fetcher for NPI-based categories (same public CMS registry).
+// Uses city-center coordinates (NPI has no lat/lng) so distances are
+// approximate to the city, deterministic, and stable between the
+// results page and the AI chat.
+// Prefers organization_name, then "Dr. First Last, CRED" for solo practitioners.
+interface NpiCategory {
+  taxonomy:   string;                 // NPI taxonomy_description filter value
+  type:       "dental" | "chiro";
+  idPrefix:   string;
+  defaultCred: string;
+  fallbackName: string;
+  services:   string[];
+}
+
+const NPI_DENTAL: NpiCategory = {
+  taxonomy: "Dentist", type: "dental", idPrefix: "dental", defaultCred: "DDS",
+  fallbackName: "Dental Clinic",
+  services: ["General Dentistry", "Cleanings", "X-Rays", "Emergency Dental"],
+};
+
+const NPI_CHIRO: NpiCategory = {
+  taxonomy: "Chiropractor", type: "chiro", idPrefix: "chiro", defaultCred: "DC",
+  fallbackName: "Chiropractic Clinic",
+  services: ["Chiropractic Care"],
+};
+
+// NPI "practice location" for individuals is self-reported and is
+// sometimes a home address. Skip anything that looks residential.
+const RESIDENTIAL_RE = /\b(apt|apartment|lot|trlr|trailer)\b/i;
+
+async function fetchNpi(cfg: NpiCategory, lat: number, lng: number): Promise<ClinicResult[]> {
   try {
     const iowaCities = getCitiesNear(lat, lng);
     const results: ClinicResult[] = [];
@@ -299,7 +333,7 @@ async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
           `?version=2.1`,
           `&state=IA`,
           `&city=${encodeURIComponent(city)}`,
-          `&taxonomy_description=Dentist`,
+          `&taxonomy_description=${encodeURIComponent(cfg.taxonomy)}`,
           `&limit=10`,
           `&skip=0`,
         ].join("");
@@ -313,32 +347,28 @@ async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
         const data = await res.json();
         if (!data.results?.length) continue;
 
-        // Use city center coordinates — deterministic, no random offset
-        // This ensures distance sorting is stable and AI matches results page
         const cityCoords = IOWA_CITY_COORDS[city.toUpperCase()] || { lat, lng };
 
         for (const [i, p] of data.results.entries()) {
           const loc = p.addresses?.find((a: any) => a.address_purpose === "LOCATION")
                    || p.addresses?.[0];
           if (!loc) continue;
+          if (RESIDENTIAL_RE.test(`${loc.address_1 || ""} ${loc.address_2 || ""}`)) continue;
 
-          // Name: prefer org name, then "Dr. FirstName LastName" format
-          // This avoids showing bare "Benjamin Clove" with no context
-          const orgName  = p.basic?.organization_name?.trim();
-          const firstName = p.basic?.first_name?.trim() || "";
-          const lastName  = p.basic?.last_name?.trim() || "";
-          const credential = p.basic?.credential?.trim() || "DDS";
+          const orgName    = p.basic?.organization_name?.trim();
+          const firstName  = p.basic?.first_name?.trim() || "";
+          const lastName   = p.basic?.last_name?.trim() || "";
+          const credential = p.basic?.credential?.trim() || cfg.defaultCred;
           const name = orgName
-            || (lastName ? `Dr. ${firstName} ${lastName}, ${credential}`.trim() : "Dental Clinic");
+            || (lastName ? `Dr. ${firstName} ${lastName}, ${credential}`.trim() : cfg.fallbackName);
 
-          // Use city center lat/lng — deterministic distance
           // Small index-based offset to spread pins slightly without randomness
           const offset = (i * 0.003) - 0.015;
           const dLat = cityCoords.lat + offset;
           const dLng = cityCoords.lng + offset;
 
           results.push({
-            id:        `dental-${city}-${i}-${p.number || i}`,
+            id:        `${cfg.idPrefix}-${city}-${i}-${p.number || i}`,
             name,
             address:   [
               loc.address_1,
@@ -348,10 +378,10 @@ async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
             ].filter(Boolean).join(", "),
             phone:     formatPhone(loc.telephone_number || ""),
             distance:  calcDistance(lat, lng, dLat, dLng),
-            open:      true,
-            type:      "dental" as const,
-            insurance: ["Medicaid", "Medicare", "Most Insurance", "Self Pay"],
-            services:  ["General Dentistry", "Cleanings", "X-Rays", "Emergency Dental"],
+            open:      null,           // NPI has no hours
+            type:      cfg.type,
+            insurance: [],             // NPI has no payer data → UI shows "Call to ask"
+            services:  cfg.services,
             telehealth: false,
             sliding:    false,
             lat:        dLat,
@@ -364,7 +394,6 @@ async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
       }
     }
 
-    // Sort by distance — now stable since no random coordinates
     return results.sort((a, b) => {
       const dA = parseFloat(a.distance.replace(/[^0-9.]/g, "")) || 999;
       const dB = parseFloat(b.distance.replace(/[^0-9.]/g, "")) || 999;
@@ -372,10 +401,13 @@ async function fetchDental(lat: number, lng: number): Promise<ClinicResult[]> {
     });
 
   } catch (err) {
-    console.error("Dental fetch error:", err);
+    console.error(`NPI ${cfg.taxonomy} fetch error:`, err);
     return [];
   }
 }
+
+const fetchDental = (lat: number, lng: number) => fetchNpi(NPI_DENTAL, lat, lng);
+const fetchChiro  = (lat: number, lng: number) => fetchNpi(NPI_CHIRO,  lat, lng);
 
 // ── Iowa city coordinate lookup ──────────────────────────────────
 const IOWA_CITY_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -417,18 +449,23 @@ function getCitiesNear(lat: number, lng: number): string[] {
 }
 
 // ── Main route ───────────────────────────────────────────────────
+// Params: lat, lng (required — no default location), and either
+//   cat   = family|mental|dental|veteran|er|uninsured|chiro  (preferred)
+//   query = free text, mapped to a category via lib/careIntent
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const lat   = parseFloat(searchParams.get("lat")  || "41.4245");
-  const lng   = parseFloat(searchParams.get("lng")  || "-91.0432");
+  const lat   = parseFloat(searchParams.get("lat") || "");
+  const lng   = parseFloat(searchParams.get("lng") || "");
   const query = (searchParams.get("query") || "").toLowerCase();
+  const catQ  = searchParams.get("cat") || "";
 
-  const wantsVet       = /veteran|va\b|military|vets/i.test(query);
-  const wantsMental    = /mental|counsel|depress|anxiety|ptsd|substance|alcohol/i.test(query);
-  const wantsDental    = /dental|dentist|tooth|teeth/i.test(query);
-  const wantsER        = /emergency|er\b|urgent|hospital|accident|chest pain/i.test(query);
-  const wantsFamily    = /doctor|primary|family|medicaid/i.test(query);
-  const wantsUninsured = /uninsured|no insurance|sliding|free clinic|low cost|low-cost|afford/i.test(query);
+  if (!isFinite(lat) || !isFinite(lng)) {
+    return NextResponse.json({ error: "lat and lng are required" }, { status: 400 });
+  }
+
+  const VALID: CareCategory[] = ["family", "mental", "dental", "veteran", "er", "uninsured", "chiro"];
+  const cat: CareCategory | null =
+    (VALID as string[]).includes(catQ) ? (catQ as CareCategory) : detectCare(query);
 
   try {
     let fqhcResults:   ClinicResult[] = [];
@@ -436,16 +473,19 @@ export async function GET(req: NextRequest) {
     let vaResults:     ClinicResult[] = [];
     let erResults:     ClinicResult[] = [];
     let dentalResults: ClinicResult[] = [];
+    let chiroResults:  ClinicResult[] = [];
 
-    if (wantsDental) {
+    if (cat === "dental") {
       dentalResults = await fetchDental(lat, lng);
-    } else if (wantsER) {
+    } else if (cat === "chiro") {
+      chiroResults = await fetchChiro(lat, lng);
+    } else if (cat === "er") {
       erResults = await fetchERs(lat, lng);
-    } else if (wantsVet) {
+    } else if (cat === "veteran") {
       vaResults = await fetchVAFacilities(lat, lng);
-    } else if (wantsMental) {
+    } else if (cat === "mental") {
       mentalResults = await fetchMentalHealth(lat, lng);
-    } else if (wantsUninsured || wantsFamily) {
+    } else if (cat === "uninsured" || cat === "family") {
       fqhcResults = await fetchFQHCs(lat, lng);
     } else {
       const [fqhcs, mental, va, ers] = await Promise.allSettled([
@@ -460,7 +500,7 @@ export async function GET(req: NextRequest) {
       erResults     = ers.status     === "fulfilled" ? ers.value     : [];
     }
 
-    let all = [...fqhcResults, ...mentalResults, ...vaResults, ...erResults, ...dentalResults];
+    const all = [...fqhcResults, ...mentalResults, ...vaResults, ...erResults, ...dentalResults, ...chiroResults];
 
     all.sort((a, b) => {
       const dA = parseFloat(a.distance.replace(/[^0-9.]/g, "")) || 999;
@@ -492,6 +532,7 @@ export async function GET(req: NextRequest) {
         va:     vaResults.length,
         er:     erResults.length,
         dental: dentalResults.length,
+        chiro:  chiroResults.length,
       },
     });
 
