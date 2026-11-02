@@ -274,8 +274,8 @@ function NavigatorInner() {
             </div>
             <div style={{ fontFamily: F.body, fontSize: 12, color: C.t3 }}>
               {lang === "en"
-                ? "Powered by Claude AI — Not medical advice"
-                : "Con tecnologia Claude IA — No es consejo medico"}
+                ? "Powered by Claude AI · Not medical advice"
+                : "Con tecnologia Claude IA · No es consejo medico"}
             </div>
           </div>
         </div>

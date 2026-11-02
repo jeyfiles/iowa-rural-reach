@@ -68,7 +68,7 @@ export default function RequestChangeModal({ isOpen, onClose, clinic, lang }: Re
     reportingWith: lang === "en" ? "Reporting an issue with" : "Reportando un problema con",
     thisListing: lang === "en" ? "This listing" : "Esta clinica",
     issueLabel: lang === "en" ? "What's wrong? *" : "Cual es el problema? *",
-    detailsLabel: lang === "en" ? "Details — what should it say instead? *" : "Detalles — que deberia decir en su lugar? *",
+    detailsLabel: lang === "en" ? "Details: what should it say instead? *" : "Detalles: que deberia decir en su lugar? *",
     detailsPlaceholder:
       lang === "en"
         ? "e.g. This clinic closed in 2025. The current CHC location is 1221 Park Ave."
@@ -79,8 +79,8 @@ export default function RequestChangeModal({ isOpen, onClose, clinic, lang }: Re
     sending: lang === "en" ? "Sending..." : "Enviando...",
     thanks:
       lang === "en"
-        ? "Thanks for the report — we'll review it and update the listing if needed."
-        : "Gracias por el reporte — lo revisaremos y actualizaremos la clinica si es necesario.",
+        ? "Thanks for the report. We'll review it and update the listing if needed."
+        : "Gracias por el reporte. Lo revisaremos y actualizaremos la clinica si es necesario.",
     done: lang === "en" ? "Done" : "Listo",
   };
 

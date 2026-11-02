@@ -243,8 +243,8 @@ export default function Home() {
         <p style={{ fontFamily: F.body, fontSize: 13, color: C.t4,
           margin: "0 0 36px", lineHeight: 1.5, maxWidth: maxW }}>
           {lang === "en"
-            ? "Type or speak — our AI will guide you to the right care and show you nearby clinics on a map."
-            : "Escriba o hable — nuestra IA le guiara y le mostrara clinicas cercanas en un mapa."}
+            ? "Type or speak. Our AI will guide you to the right care and show you nearby clinics on a map."
+            : "Escriba o hable. Nuestra IA le guiara y le mostrara clinicas cercanas en un mapa."}
         </p>
 
         {/* Category buttons — full width, direct to results */}

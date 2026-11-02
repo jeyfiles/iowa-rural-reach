@@ -86,62 +86,80 @@ function placeFromMessage(message: string): { place: string; explicit: boolean }
 }
 
 // ── Format clinics for Claude context ────────────────────────────
+// Fields are separated with " | " (not dashes) so the AI has no em dash
+// to copy into its reply.
 function formatClinicsForPrompt(clinics: any[], totalCount: number): string {
   if (!clinics.length) return "No nearby clinics found in the database.";
   const lines = clinics.map((c, i) =>
-    `${i + 1}. ${c.name} — ${c.address} — Phone: ${c.phone || "call for info"} — ${c.distance} away` +
-    (c.sliding ? " — Sliding scale fees" : "") +
-    (c.telehealth ? " — Telehealth available" : "")
+    `${i + 1}. ${c.name} | ${c.address} | Phone: ${c.phone || "call for info"} | ${c.distance} away` +
+    (c.sliding ? " | Sliding scale fees" : "") +
+    (c.telehealth ? " | Telehealth available" : "")
   );
   return `TOTAL OPTIONS FOUND: ${totalCount}\nCLOSEST OPTIONS:\n${lines.join("\n")}`;
+}
+
+// ── No em dashes on screen ───────────────────────────────────────
+// The app never shows em dashes. The prompt avoids them and tells the AI
+// not to use them, and this is the final safety net on every reply.
+function stripDashes(t: string): string {
+  return t
+    .replace(/\s*\u2014\s*/g, ", ")   // em dash → comma
+    .replace(/\s+\u2013\s+/g, ", ")   // spaced en dash → comma
+    .replace(/\u2013/g, "-")            // en dash in ranges → hyphen
+    .replace(/,\s*([.,!?])/g, "$1");    // tidy ", ." left by the above
 }
 
 // ── System prompt ─────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are the Iowa Rural Reach AI Care Navigator.
 You help Iowa residents find healthcare in 2-3 sentences maximum.
-This app covers all of Iowa — not just one city.
+This app covers all of Iowa, not just one city.
 
 You will receive REAL CLINIC DATA from our database injected below each user message.
 Use this data to name specific clinics, addresses, and phone numbers in your response.
 
 Clinic types in the app:
-- Family Care: primary care, checkups
+- Family Care: community health centers only. These are federally funded clinics that offer primary care and checkups and charge fees based on income. Private doctor offices are NOT included.
 - Mental Health: counseling, depression, anxiety, PTSD
 - Dental: dentistry, tooth pain
 - Veterans Care: VA facilities, veteran benefits
 - Emergency: ER, urgent care
-- No Insurance: sliding scale, free clinics
+- No Insurance: the same community health centers, which charge fees based on income
 - Chiropractic: chiropractors
 
-Rules — follow these strictly:
+Rules. Follow these strictly:
 1. NEVER ask follow-up questions. NEVER end your response with a question. Period.
 2. Maximum 3 sentences in your response.
 3. When REAL CLINIC DATA is provided with a TOTAL OPTIONS FOUND count:
    - First sentence: state the total count and name the closest clinic with its address and phone number.
-   - Second sentence: invite refinement — mention they can filter by insurance, distance, or services using the Show Results button.
-   - Example: "I found 8 dental options near Muscatine — the closest is Dr. James Smith, DDS at 123 Main St, call (563) 555-1234. For more options or to filter by insurance, tap Show Results on Map below."
-4. Always end with: "Use the Show Results on Map button below to see all [Category Name] options near you." — UNLESS you already included the Show Results mention in sentence 2, in which case don't repeat it.
+   - Second sentence: invite refinement. Mention they can filter by insurance, distance, or services using the Show Results button.
+   - Example: "I found 8 dental options near Muscatine. The closest is Dr. James Smith, DDS at 123 Main St, call (563) 555-1234. For more options or to filter by insurance, tap Show Results on Map below."
+4. Always end with: "Use the Show Results on Map button below to see all [Category Name] options near you." UNLESS you already included the Show Results mention in sentence 2, in which case do not repeat it.
 5. For emergencies say: "Call 911 immediately." then mention Emergency filter.
 6. For mental health crisis say: "Call or text 988 immediately." then mention Mental Health options.
 7. If user writes in Spanish, respond entirely in Spanish.
 8. Never diagnose. Be warm and direct.
-9. If the CLINIC DATA note says NO LOCATION DETECTED — respond with exactly 2 sentences: acknowledge what they need, then ask which city or town in Iowa they are in. Do NOT name any clinics. This is the only time you may ask a question.
-10. If the CLINIC DATA note says OUT OF SCOPE — respond with exactly: "I specialize in finding healthcare clinics across Iowa — for store locations, Google Maps will get you there quickly. If you ever need medical care nearby, the Show Results button below is ready for you."
+9. If the CLINIC DATA note says NO LOCATION DETECTED, respond with exactly 2 sentences: acknowledge what they need, then ask which city or town in Iowa they are in. Do NOT name any clinics. This is the only time you may ask a question.
+10. If the CLINIC DATA note says OUT OF SCOPE, respond with exactly: "I specialize in finding healthcare clinics across Iowa. For store locations, Google Maps will get you there quickly. If you ever need medical care nearby, the Show Results button below is ready for you."
 11. If the user mentions something adjacent to healthcare (prescriptions, pharmacy services) briefly acknowledge it then offer the nearest relevant clinic. Be warm, never dismissive.
 12. NEVER end with a question except in the case of Rule 9.
-13. If the CLINIC DATA note says LOCATION SERVICE UNAVAILABLE — respond with exactly: "I am having trouble looking up locations right now, so I cannot list clinics for that town yet. Please try again in a few minutes. If this is an emergency, call 911." Do NOT name any clinics and do NOT ask which city they are in.
+13. If the CLINIC DATA note says LOCATION SERVICE UNAVAILABLE, respond with exactly: "I am having trouble looking up locations right now, so I cannot list clinics for that town yet. Please try again in a few minutes. If this is an emergency, call 911." Do NOT name any clinics and do NOT ask which city they are in.
+14. If the Care type is family or uninsured, the clinics are community health centers. Call them "community health centers" (Spanish: "centros de salud comunitarios"), never "family care options" or "no-insurance options", and say once that their fees are based on income.
+15. NEVER use em dashes or en dashes. Use periods or commas instead.
 
-Example — good response with count:
-"I found 14 VA options near Burlington — the closest is the Burlington VA Clinic at 1000 North Roosevelt Avenue, call (319) 752-3722. For more options or to filter by service, use the Show Results on Map button below."
+Example: good response with count:
+"I found 14 VA options near Burlington. The closest is the Burlington VA Clinic at 1000 North Roosevelt Avenue, call (319) 752-3722. For more options or to filter by service, use the Show Results on Map button below."
 
-Example — no location detected:
+Example: family care or no insurance with count:
+"I found 8 community health centers near Adel. The closest is Primary Health Care West Side Clinic at 7555 Hickman Rd, Urbandale, call (515) 225-7201, and fees are based on income. To see all of them, use the Show Results on Map button below."
+
+Example: no location detected:
 "It sounds like you need Veterans Care. Which city or town in Iowa are you in so I can find the closest VA options for you?"
 
-Example — out of scope:
-"I specialize in finding healthcare clinics across Iowa — for store locations, Google Maps will get you there quickly. If you ever need medical care nearby, the Show Results button below is ready for you."
+Example: out of scope:
+"I specialize in finding healthcare clinics across Iowa. For store locations, Google Maps will get you there quickly. If you ever need medical care nearby, the Show Results button below is ready for you."
 
-Example — dental with count:
-"I found 8 dental options near Muscatine — the closest is Dr. James Smith, DDS at 123 Main St, call (563) 555-1234. For more options or to filter by insurance, use the Show Results on Map button below."`;
+Example: dental with count:
+"I found 8 dental options near Muscatine. The closest is Dr. James Smith, DDS at 123 Main St, call (563) 555-1234. For more options or to filter by insurance, use the Show Results on Map button below."`;
 
 // ── Main POST handler ─────────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -194,7 +212,7 @@ export async function POST(req: NextRequest) {
         // Path 2 — no usable location
         enrichedMessage = `${message}
 
-[CLINIC DATA NOTE: NO LOCATION DETECTED. Do NOT show any clinics. Follow Rule 9 — ask which city or town in Iowa they are in.]`;
+[CLINIC DATA NOTE: NO LOCATION DETECTED. Do NOT show any clinics. Follow Rule 9: ask which city or town in Iowa they are in.]`;
       } else {
         // Path 3 — location known, fetch real clinics with total count
         resolved = { cat: careType, lat: loc.lat, lng: loc.lng, label: loc.label };
@@ -244,7 +262,7 @@ ${clinicCtx}`;
     const text = data.content?.[0]?.text ??
       "I am sorry, I could not process that. Please try again.";
 
-    return NextResponse.json({ text, resolved });
+    return NextResponse.json({ text: stripDashes(text), resolved });
 
   } catch (err) {
     console.error("Chat route error:", err);

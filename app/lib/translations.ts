@@ -51,7 +51,7 @@ const INSURANCE_TRANSLATIONS: Record<string, string> = {
   "Sliding Scale":             "Escala Movil",
   "Self Pay":                  "Pago Directo",
   "Most Insurance":            "La Mayoria de Seguros",
-  "Emergency — all patients treated": "Emergencia — todos los pacientes atendidos",
+  "Emergency: all patients treated": "Emergencia: todos los pacientes atendidos",
 };
 
 export function translateService(term: string, lang: "en" | "es"): string {

@@ -35,8 +35,8 @@ export default function FeedbackModal({ isOpen, onClose, lang }: FeedbackModalPr
     sending: lang === "en" ? "Sending..." : "Enviando...",
     thanks:
       lang === "en"
-        ? "Thanks — your feedback helps us improve Iowa Rural Reach."
-        : "Gracias — su opinion nos ayuda a mejorar Iowa Rural Reach.",
+        ? "Thank you. Your feedback helps us improve Iowa Rural Reach."
+        : "Gracias. Su opinion nos ayuda a mejorar Iowa Rural Reach.",
     done: lang === "en" ? "Done" : "Listo",
   };
 

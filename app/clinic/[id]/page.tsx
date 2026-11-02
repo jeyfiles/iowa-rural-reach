@@ -422,8 +422,8 @@ function ClinicDetailInner() {
                   <div style={{ fontFamily: F.body, fontSize: isMobile ? 13 : 14,
                     color: "#1E3A8A", lineHeight: 1.6 }}>
                     {lang === "en"
-                      ? "You can schedule a virtual appointment with this clinic. No need to drive — meet with a provider from your phone or computer."
-                      : "Puede programar una cita virtual. No necesita manejar — reunase con un proveedor desde su telefono o computadora."}
+                      ? "You can schedule a virtual appointment with this clinic. No need to drive. Meet with a provider from your phone or computer."
+                      : "Puede programar una cita virtual. No necesita manejar. Reunase con un proveedor desde su telefono o computadora."}
                   </div>
                 </div>
               </div>
@@ -466,7 +466,7 @@ function ClinicDetailInner() {
                 <div style={{ fontFamily: F.body, fontSize: isMobile ? 14 : 15,
                   color: "#14532D", lineHeight: 1.7 }}>
                   {lang === "en"
-                    ? "This clinic uses a sliding scale fee system. You pay based on your income level — even if you have no insurance at all. No one is turned away due to inability to pay."
+                    ? "This clinic uses a sliding scale fee system. You pay based on your income level, even if you have no insurance at all. No one is turned away due to inability to pay."
                     : "Esta clinica usa un sistema de tarifas de escala movil. Usted paga segun su nivel de ingresos. No se rechaza a nadie por falta de pago."}
                 </div>
               </div>

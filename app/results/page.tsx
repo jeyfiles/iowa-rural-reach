@@ -809,6 +809,10 @@ function ResultsInner() {
     router.push(`/results?${p.toString()}`);
   }
 
+  // Family Care and No Insurance results are HRSA community health centers
+  // only (no private offices), so the list header names them as such.
+  const isHealthCenterCat = catParam === "family" || catParam === "uninsured";
+
   const filtered = allClinics.filter(c => {
     if (catParam === "uninsured") {
       return c.type === "uninsured" || (c.type === "family" && c.sliding);
@@ -854,8 +858,8 @@ function ResultsInner() {
           justifyContent: "space-between", gap: 12 }}>
           <span style={{ fontFamily: F.body, fontSize: 13, color: "#7A5E00" }}>
             {lang === "en"
-              ? "Lite Mode — optimized for slow connections"
-              : "Modo Lite — optimizado para conexiones lentas"}
+              ? "Lite Mode: optimized for slow connections"
+              : "Modo Lite: optimizado para conexiones lentas"}
           </span>
         </div>
 
@@ -907,7 +911,9 @@ function ResultsInner() {
           {!loading && !apiError && locStatus === "ready" && (
             <>
               <div style={{ fontFamily: F.body, fontSize: 13, color: C.t3, marginBottom: 4 }}>
-                {filtered.length} {lang === "en" ? "results near" : "resultados cerca de"} {locationLabel}
+                {filtered.length} {isHealthCenterCat
+                  ? (lang === "en" ? "community health centers near" : "centros de salud comunitarios cerca de")
+                  : (lang === "en" ? "results near" : "resultados cerca de")} {locationLabel}
                 {" · "}
                 <button onClick={changeLocation}
                   style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
@@ -943,7 +949,7 @@ function ResultsInner() {
               <span style={{ fontFamily: F.heading, fontSize: 13,
                 fontWeight: 700, color: C.iRed }}>911</span>
               <span style={{ fontFamily: F.body, fontSize: 14, color: C.iRed, fontWeight: 500 }}>
-                {lang === "en" ? "Physical Emergency — Call 911" : "Emergencia Fisica — Llame al 911"}
+                {lang === "en" ? "Physical Emergency: Call 911" : "Emergencia Fisica: Llame al 911"}
               </span>
             </div>
           </a>
@@ -953,7 +959,7 @@ function ResultsInner() {
               <span style={{ fontFamily: F.heading, fontSize: 13,
                 fontWeight: 700, color: C.iBlue }}>988</span>
               <span style={{ fontFamily: F.body, fontSize: 14, color: C.iBlue, fontWeight: 500 }}>
-                {lang === "en" ? "Mental Health Crisis — Call 988" : "Crisis Mental — Llame al 988"}
+                {lang === "en" ? "Mental Health Crisis: Call 988" : "Crisis Mental: Llame al 988"}
               </span>
             </div>
           </a>
@@ -1144,7 +1150,9 @@ function ResultsInner() {
             color: C.t3, marginBottom: 6, fontWeight: 500 }}>
             {filtered.length === 0
               ? (lang === "en" ? "No results found near " : "Sin resultados cerca de ")
-              : `${filtered.length} ${lang === "en" ? "care options near" : "opciones cerca de"} `}
+              : `${filtered.length} ${isHealthCenterCat
+                  ? (lang === "en" ? "community health centers near" : "centros de salud comunitarios cerca de")
+                  : (lang === "en" ? "care options near" : "opciones cerca de")} `}
             {locationLabel}
             {" · "}
             <button onClick={changeLocation}

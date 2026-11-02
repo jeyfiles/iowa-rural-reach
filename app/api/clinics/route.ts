@@ -72,6 +72,19 @@ function formatPhone(raw: string): string {
 // feed, so that's unchanged too. The only visible difference is that some
 // cards that used to show a "No Insurance" badge will now show "Family
 // Care" instead — a label difference, not a functional one.
+// Source data (HRSA, SAMHSA, VA, NPI) can contain em/en dashes in names or
+// addresses. The app shows no em dashes anywhere, so clean every text field.
+function cleanDash(s: string): string {
+  return s.replace(/\s*\u2014\s*/g, ", ").replace(/\s+\u2013\s+/g, ", ").replace(/\u2013/g, "-");
+}
+function noDashes(c: ClinicResult): ClinicResult {
+  const fix = (v: unknown): unknown =>
+    typeof v === "string" ? cleanDash(v) : Array.isArray(v) ? v.map(fix) : v;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(c)) out[k] = fix(v);
+  return out as unknown as ClinicResult;
+}
+
 async function fetchFQHCs(lat: number, lng: number): Promise<ClinicResult[]> {
   try {
     const url = `https://data.hrsa.gov/HDWLocatorApi/healthcenters/find?lon=${lng}&lat=${lat}&radius=40`;
@@ -274,7 +287,7 @@ async function fetchERs(lat: number, lng: number): Promise<ClinicResult[]> {
       type:      "er" as const,
       // Federal law (EMTALA) requires ERs to screen/stabilize regardless of
       // ability to pay. Payer list isn't in our data, so nothing else shown.
-      insurance: ["Emergency — all patients treated"],
+      insurance: ["Emergency: all patients treated"],
       services:  ["Emergency Care", "Urgent Care", "Trauma"],
       telehealth: false,
       sliding:   false,
@@ -524,7 +537,7 @@ export async function GET(req: NextRequest) {
       .filter(c => !isExcludedAddress(c.address));
 
     return NextResponse.json({
-      clinics: deduped,
+      clinics: deduped.map(noDashes),
       count:   deduped.length,
       sources: {
         fqhc:   fqhcResults.length,
