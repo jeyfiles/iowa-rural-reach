@@ -10,15 +10,27 @@ function isOutOfScope(msg: string): boolean {
   return /walgreens|cvs|walmart|target|hy-?vee|fareway|aldi|kroger|costco|restaurant|gas station|directions to|address of|where is the|grocery|pharmacy location|drug store/i.test(msg);
 }
 
-// ── Geocode a place name (null = not found) ──────────────────────
-async function geocode(place: string, baseUrl: string) {
+// ── Geocode a place name ─────────────────────────────────────────
+// "unavailable" = the lookup service failed (Google refused, network),
+// which is different from the place not existing. Keeping them apart
+// stops the chat from asking for a city the user already typed.
+type GeoResult =
+  | { kind: "ok"; lat: number; lng: number; label: string }
+  | { kind: "notFound" }
+  | { kind: "unavailable" };
+
+async function geocode(place: string, baseUrl: string): Promise<GeoResult> {
   try {
     const r = await fetch(`${baseUrl}/api/geocode?address=${encodeURIComponent(place)}`);
-    const g = await r.json();
-    if (!r.ok || g.notFound || typeof g.lat !== "number") return null;
-    return { lat: g.lat as number, lng: g.lng as number,
-             label: String(g.formattedAddress || place.replace(/,\s*iowa$/i, "")) };
-  } catch { return null; }
+    const g = await r.json().catch(() => ({}));
+    if (r.ok && typeof g.lat === "number") {
+      return { kind: "ok", lat: g.lat, lng: g.lng,
+               label: String(g.formattedAddress || place.replace(/,\s*iowa$/i, "")) };
+    }
+    if (r.ok && g.notFound) return { kind: "notFound" };
+    console.error("Chat: geocode unavailable", r.status, g.googleStatus || g.error || "");
+    return { kind: "unavailable" };
+  } catch { return { kind: "unavailable" }; }
 }
 
 // ── Fetch real clinics for known coordinates ──────────────────────
@@ -117,6 +129,7 @@ Rules — follow these strictly:
 10. If the CLINIC DATA note says OUT OF SCOPE — respond with exactly: "I specialize in finding healthcare clinics across Iowa — for store locations, Google Maps will get you there quickly. If you ever need medical care nearby, the Show Results button below is ready for you."
 11. If the user mentions something adjacent to healthcare (prescriptions, pharmacy services) briefly acknowledge it then offer the nearest relevant clinic. Be warm, never dismissive.
 12. NEVER end with a question except in the case of Rule 9.
+13. If the CLINIC DATA note says LOCATION SERVICE UNAVAILABLE — respond with exactly: "I am having trouble looking up locations right now, so I cannot list clinics for that town yet. Please try again in a few minutes. If this is an emergency, call 911." Do NOT name any clinics and do NOT ask which city they are in.
 
 Example — good response with count:
 "I found 14 VA options near Burlington — the closest is the Burlington VA Clinic at 1000 North Roosevelt Avenue, call (319) 752-3722. For more options or to filter by service, use the Show Results on Map button below."
@@ -167,9 +180,17 @@ export async function POST(req: NextRequest) {
       // silently using an older city.
       const asked = placeFromMessage(message);
       const geo   = asked ? await geocode(asked.place, baseUrl) : null;
-      const loc   = geo ?? (asked?.explicit ? null : known);
+      const found = geo?.kind === "ok" ? geo : null;
+      // Service down → say so honestly. Don't ask for the city again, and
+      // don't swap in an older city for the town they just typed.
+      const serviceDown = geo?.kind === "unavailable";
+      const loc   = found ?? (asked?.explicit ? null : known);
 
-      if (!loc) {
+      if (serviceDown) {
+        enrichedMessage = `${message}
+
+[CLINIC DATA NOTE: LOCATION SERVICE UNAVAILABLE. Do NOT show any clinics. Follow Rule 13 exactly.]`;
+      } else if (!loc) {
         // Path 2 — no usable location
         enrichedMessage = `${message}
 
